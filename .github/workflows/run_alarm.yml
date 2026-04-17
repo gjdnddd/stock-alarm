@@ -1,0 +1,33 @@
+name: Stock Alarm Daily
+
+on:
+  schedule:
+    # 한국 시간(KST)은 UTC보다 9시간 빠릅니다.
+    # 한국 화~토 06:10 = UTC 월~금 21:10
+    # 분(10) 시(21) 일(*) 월(*) 요일(1-5: 월~금)
+    - cron: '10 21 * * 1-5'
+  workflow_dispatch: # 언제든 수동으로 실행해볼 수 있는 버튼 생성
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run script
+        env:
+          MY_GITHUB_TOKEN: ${{ secrets.MY_GITHUB_TOKEN }}
+          MY_GIST_ID: ${{ secrets.MY_GIST_ID }}
+          MY_TELEGRAM_TOKEN: ${{ secrets.MY_TELEGRAM_TOKEN }}
+          MY_CHAT_ID: ${{ secrets.MY_CHAT_ID }}
+        run: python main.py
