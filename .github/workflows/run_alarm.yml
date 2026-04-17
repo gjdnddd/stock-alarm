@@ -2,21 +2,18 @@ name: Stock Alarm Daily
 
 on:
   schedule:
-    # 한국 시간(KST)은 UTC보다 9시간 빠릅니다.
-    # 한국 화~토 06:10 = UTC 월~금 21:10
-    # 분(10) 시(21) 일(*) 월(*) 요일(1-5: 월~금)
     - cron: '10 21 * * 1-5'
-  workflow_dispatch: # 언제든 수동으로 실행해볼 수 있는 버튼 생성
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4  # v3 -> v4 업데이트
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5 # v4 -> v5 업데이트
         with:
           python-version: '3.10'
 
@@ -30,4 +27,6 @@ jobs:
           MY_GIST_ID: ${{ secrets.MY_GIST_ID }}
           MY_TELEGRAM_TOKEN: ${{ secrets.MY_TELEGRAM_TOKEN }}
           MY_CHAT_ID: ${{ secrets.MY_CHAT_ID }}
+          # Node.js 24 강제 설정 추가
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
         run: python main.py
