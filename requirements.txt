@@ -1,3 +1,5 @@
-yfinance
+streamlit
 requests
+yfinance
 pandas
+python-dotenv
