@@ -8,8 +8,9 @@ from dotenv import load_dotenv
 
 # 0. .env 파일 로드
 load_dotenv()
-env_token = os.getenv("MY_GITHUB_TOKEN", "")
-env_gist_id = os.getenv("MY_GIST_ID", "")
+# 우선 순위: 1. Streamlit Secrets(Cloud), 2. Environment Variable(.env)
+env_token = st.secrets.get("MY_GITHUB_TOKEN", os.getenv("MY_GITHUB_TOKEN", ""))
+env_gist_id = st.secrets.get("MY_GIST_ID", os.getenv("MY_GIST_ID", ""))
 
 # 1. 페이지 설정
 st.set_page_config(page_title="미국주식 통합 전략 대시보드", layout="wide")
