@@ -6,24 +6,20 @@ import pandas as pd
 import os
 from dotenv import load_dotenv
 
-# 0. .env 파일 로드
+# 0. .env 파일 로드 (로컬용)
 load_dotenv()
-# 우선 순위: 1. Streamlit Secrets(Cloud), 2. Environment Variable(.env)
-env_token = st.secrets.get("MY_GITHUB_TOKEN", os.getenv("MY_GITHUB_TOKEN", ""))
-env_gist_id = st.secrets.get("MY_GIST_ID", os.getenv("MY_GIST_ID", ""))
 
-# 1. 페이지 설정
+# 1. 페이지 설정 및 제목
 st.set_page_config(page_title="미국주식 통합 전략 대시보드", layout="wide")
 st.title("📈 미국주식 통합 전략 비주얼 현황판")
 
-# --- 사이드바 설정 (보안 강화 버전) ---
+# 2. 사이드바 설정 (보안 강화: Secrets/env 우선 로드)
 st.sidebar.header("🔐 인증 설정")
 
-# env나 secrets에서 먼저 값을 가져옴
 env_token = st.secrets.get("MY_GITHUB_TOKEN", os.getenv("MY_GITHUB_TOKEN", ""))
 env_gist_id = st.secrets.get("MY_GIST_ID", os.getenv("MY_GIST_ID", ""))
 
-# 값이 없을 때만 입력창을 보여줌 (값이 있으면 자동 할당 후 숨김)
+# 값이 있으면 숨기고, 없으면 입력창 표시
 if not env_token:
     token = st.sidebar.text_input("GitHub Token", type="password")
 else:
@@ -35,6 +31,11 @@ if not env_gist_id:
 else:
     gist_id = env_gist_id
     st.sidebar.success("Gist ID 로드 완료")
+
+# 수동 수정이 필요할 때를 위한 옵션
+if st.sidebar.checkbox("인증 정보 수동 수정"):
+    token = st.sidebar.text_input("수동 Token", value=token, type="password")
+    gist_id = st.sidebar.text_input("수동 Gist ID", value=gist_id)
 
 # --- 유틸리티 함수 ---
 def get_gist_data(token, gist_id):
@@ -67,6 +68,7 @@ if token and gist_id:
     
     if data:
         for ticker in ["QQQ", "SOXX"]:
+            # 실시간 주가 및 ATH 정보 가져오기
             try:
                 stock = yf.Ticker(ticker)
                 hist = stock.history(period="max")
@@ -77,24 +79,35 @@ if token and gist_id:
                 st.error(f"{ticker} 데이터를 가져오는데 실패했습니다.")
                 continue
 
-            with st.expander(f"🔍 {ticker} 실시간 전략 모니터링 (ATH: ${ath_now:.2f})", expanded=True):
+            with st.expander(f"🔍 {ticker} 실시간 전략 모니터링", expanded=True):
+                # 상단 메트릭 표시
                 m1, m2, m3 = st.columns(3)
                 m1.metric("현재가", f"${curr_p:.2f}")
-                m2.metric("ATH 대비 하락률", f"{drop_now:.2f}%")
+                m2.metric("전고점(ATH)", f"${ath_now:.2f}")
+                m3.metric("ATH 대비 하락률", f"{drop_now:.2f}%")
                 
-                # 1. 무한매수 현황 계산
+                # --- [수정] 무한매수 현황 계산 (추적형 최고가 반영) ---
                 infi = data[ticker].get("Infi", {})
-                infi_ref = infi.get("High_After_End", 0.0)
+                infi_start_price = infi.get("High_After_End", 0.0)
+                
+                # 매도 가격과 현재 ATH 중 더 높은 것을 기준점으로 자동 추적
+                infi_ref = max(infi_start_price, ath_now)
+                
                 infi_drop = (curr_p / infi_ref - 1) * 100 if infi_ref > 0 else 0
                 infi_limit = -3 if ticker == "QQQ" else -4
                 
                 status_rows = []
                 
-                # 무매 상태
+                # 무매 상태 요약
                 infi_status = "✅ 대기"
                 if infi_drop <= infi_limit: infi_status = "🚨 즉시매수"
                 elif infi_drop <= infi_limit + 1.5: infi_status = "🟡 진입준비"
-                status_rows.append({"구분": "무한매수", "기준점": f"종료고가(${infi_ref:.1f})", "현재상태": f"{infi_drop:.1f}%", "액션": infi_status})
+                status_rows.append({
+                    "구분": "무한매수", 
+                    "기준점": f"종료후최고가(${infi_ref:.1f})", 
+                    "현재상태": f"{infi_drop:.1f}%", 
+                    "액션": infi_status
+                })
 
                 # 신/구 사이클 상태
                 for c_key in ["New", "Old"]:
@@ -116,12 +129,12 @@ if token and gist_id:
 
                 st.table(pd.DataFrame(status_rows))
 
-                # --- 3. 설정 변경 섹션 ---
+                # --- 제어 섹션 ---
                 st.markdown("#### ⚙️ 세부 설정 변경")
                 e_col1, e_col2, e_col3 = st.columns(3)
                 
                 with e_col1:
-                    new_infi_high = st.number_input(f"{ticker} 무매 종료 최고가", value=float(infi_ref), key=f"{ticker}_infi_input")
+                    new_infi_high = st.number_input(f"{ticker} 무매 매도시점가", value=float(infi_start_price), key=f"{ticker}_infi_input")
                     data[ticker]["Infi"]["High_After_End"] = new_infi_high
                 
                 with e_col2:
@@ -140,6 +153,7 @@ if token and gist_id:
                 
                 st.divider()
 
+        # 저장 버튼
         if st.button("💾 모든 전략 변경사항 Gist에 저장", use_container_width=True):
             if update_gist_data(token, gist_id, data):
                 st.success("전략이 성공적으로 저장되었습니다!")
@@ -147,4 +161,4 @@ if token and gist_id:
     else:
         st.error("데이터를 불러오지 못했습니다. 사이드바의 인증 정보를 확인하세요.")
 else:
-    st.warning("👈 사이드바에 GitHub Token과 Gist ID를 입력해주세요.")
+    st.warning("👈 사이드바에 인증 정보를 입력하거나 Secrets를 설정해주세요.")
