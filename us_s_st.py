@@ -16,10 +16,30 @@ env_gist_id = st.secrets.get("MY_GIST_ID", os.getenv("MY_GIST_ID", ""))
 st.set_page_config(page_title="미국주식 통합 전략 대시보드", layout="wide")
 st.title("📈 미국주식 통합 전략 비주얼 현황판")
 
-# 2. 사이드바 설정 (env 값이 있으면 기본값으로 채움)
+# --- 사이드바 설정 (보안 강화 버전) ---
 st.sidebar.header("🔐 인증 설정")
-token = st.sidebar.text_input("GitHub Token", value=env_token, type="password")
-gist_id = st.sidebar.text_input("Gist ID", value=env_gist_id)
+
+# env나 secrets에서 먼저 값을 가져옴
+env_token = st.secrets.get("MY_GITHUB_TOKEN", os.getenv("MY_GITHUB_TOKEN", ""))
+env_gist_id = st.secrets.get("MY_GIST_ID", os.getenv("MY_GIST_ID", ""))
+
+# 값이 없을 때만 입력창을 보여줌 (값이 있으면 자동 할당 후 숨김)
+if not env_token:
+    token = st.sidebar.text_input("GitHub Token", type="password")
+else:
+    token = env_token
+    st.sidebar.success("GitHub Token 로드 완료")
+
+if not env_gist_id:
+    gist_id = st.sidebar.text_input("Gist ID")
+else:
+    gist_id = env_gist_id
+    st.sidebar.success("Gist ID 로드 완료")
+
+# 만약 관리자 모드에서 수정하고 싶을 때를 위해 숨겨진 체크박스 하나만 배치
+if st.sidebar.checkbox("수동 입력 모드"):
+    token = st.sidebar.text_input("수동 Token", value=token, type="password", key="manual_token")
+    gist_id = st.sidebar.text_input("수동 Gist ID", value=gist_id, key="manual_gist")
 
 # --- 유틸리티 함수 ---
 def get_gist_data(token, gist_id):
