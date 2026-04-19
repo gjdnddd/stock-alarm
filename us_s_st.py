@@ -36,11 +36,6 @@ else:
     gist_id = env_gist_id
     st.sidebar.success("Gist ID 로드 완료")
 
-# 만약 관리자 모드에서 수정하고 싶을 때를 위해 숨겨진 체크박스 하나만 배치
-if st.sidebar.checkbox("수동 입력 모드"):
-    token = st.sidebar.text_input("수동 Token", value=token, type="password", key="manual_token")
-    gist_id = st.sidebar.text_input("수동 Gist ID", value=gist_id, key="manual_gist")
-
 # --- 유틸리티 함수 ---
 def get_gist_data(token, gist_id):
     url = f"https://api.github.com/gists/{gist_id}"
