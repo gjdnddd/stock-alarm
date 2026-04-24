@@ -2,13 +2,10 @@ name: Stock Alarm Daily
 
 on:
   schedule:
-    # 1. 새벽 기상 보고 & 안티슬립 (03:00 KST / UTC 18:00)
-    - cron: '0 18 * * *'
-    # 2. 메인 주식 알람 (화~토 06:10 KST / UTC 월~금 21:10)
-    - cron: '10 21 * * 1-5'
-    # 3. 오후 현황 보고 & 안티슬립 (15:00 KST / UTC 06:00)
-    - cron: '0 6 * * *'
-  workflow_dispatch:
+    - cron: '0 18 * * *'    # 03:00 KST
+    - cron: '0 20 * * 1-5' # 05:00 KST
+    - cron: '0 6 * * *'     # 15:00 KST
+  workflow_dispatch:        # 이 부분이 있어야 'Run workflow' 버튼이 생깁니다!
 
 jobs:
   build:
@@ -24,7 +21,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install -r requirements.txt
+          pip install yfinance requests
 
       - name: Run script
         env:
@@ -32,5 +29,4 @@ jobs:
           MY_GIST_ID: ${{ secrets.MY_GIST_ID }}
           MY_TELEGRAM_TOKEN: ${{ secrets.MY_TELEGRAM_TOKEN }}
           MY_CHAT_ID: ${{ secrets.MY_CHAT_ID }}
-          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
         run: python main.py
