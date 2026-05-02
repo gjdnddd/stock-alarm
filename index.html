@@ -2,420 +2,364 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Stock Alarm</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Stock Alarm (v2.0)</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { -webkit-tap-highlight-color: transparent; }
+    input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  </style>
 </head>
-<body class="bg-[#0f172a] text-white min-h-screen">
+<body class="bg-[#0f172a] text-white min-h-screen font-sans">
   <div class="p-4 max-w-2xl mx-auto">
 
     <!-- 헤더 -->
-    <div class="flex items-center justify-between mb-4">
-      <h1 class="text-lg font-bold">📈 Stock Alarm</h1>
+    <div class="flex items-center justify-between mb-2">
+      <h1 class="text-lg font-bold flex items-center gap-2">
+        <span class="text-emerald-400">📈</span> Stock Alarm
+      </h1>
       <div class="flex gap-2">
-        <button onclick="refreshAll()" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-sm font-medium">새로고침</button>
-        <button onclick="toggleSettings()" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-sm">⚙️</button>
-      </div>
-    </div>
-
-    <!-- 설정 패널 -->
-    <div id="settings-panel" class="hidden mb-4 bg-slate-800 rounded-xl p-4">
-      <p class="text-xs text-slate-400 mb-3">투자 대시보드와 같은 Gist ID · Token을 사용합니다.</p>
-      <div class="space-y-2">
-        <div>
-          <label class="text-xs text-slate-400">Gist ID</label>
-          <input id="inp-gist-id" type="text" placeholder="Gist ID 입력"
-            class="w-full bg-slate-700 rounded px-3 py-2 text-sm mt-1 outline-none">
-        </div>
-        <div>
-          <label class="text-xs text-slate-400">GitHub Token</label>
-          <input id="inp-token" type="password" placeholder="ghp_..."
-            class="w-full bg-slate-700 rounded px-3 py-2 text-sm mt-1 outline-none">
-        </div>
-        <div>
-          <label class="text-xs text-slate-400">Finnhub API Key <span class="text-slate-500">(finnhub.io 무료 발급)</span></label>
-          <input id="inp-finnhub" type="password" placeholder="d1234..."
-            class="w-full bg-slate-700 rounded px-3 py-2 text-sm mt-1 outline-none">
-        </div>
-        <button onclick="saveSettings()"
-          class="w-full py-2 bg-blue-600 rounded text-sm font-medium mt-1">저장 후 로드</button>
-      </div>
-      <div class="border-t border-slate-700 mt-4 pt-3">
-        <p class="text-xs text-slate-400 mb-2">수동 가격 입력 (자동 fetch 실패 시)</p>
-        <div class="grid grid-cols-2 gap-2">
-          <div>
-            <label class="text-xs text-slate-500">QQQ 현재가</label>
-            <input id="manual-qqq-p" type="number" step="0.01" placeholder="480.00"
-              class="w-full bg-slate-700 rounded px-3 py-2 text-sm mt-1 outline-none">
-          </div>
-          <div>
-            <label class="text-xs text-slate-500">QQQ ATH</label>
-            <input id="manual-qqq-a" type="number" step="0.01" placeholder="540.00"
-              class="w-full bg-slate-700 rounded px-3 py-2 text-sm mt-1 outline-none">
-          </div>
-          <div>
-            <label class="text-xs text-slate-500">SOXX 현재가</label>
-            <input id="manual-soxx-p" type="number" step="0.01" placeholder="200.00"
-              class="w-full bg-slate-700 rounded px-3 py-2 text-sm mt-1 outline-none">
-          </div>
-          <div>
-            <label class="text-xs text-slate-500">SOXX ATH</label>
-            <input id="manual-soxx-a" type="number" step="0.01" placeholder="350.00"
-              class="w-full bg-slate-700 rounded px-3 py-2 text-sm mt-1 outline-none">
-          </div>
-        </div>
-        <button onclick="applyManualPrices()"
-          class="w-full py-2 bg-slate-600 hover:bg-slate-500 rounded text-sm mt-2">수동 가격 적용</button>
+        <button onclick="refreshAll()" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-bold shadow-lg transition-all active:scale-95">새로고침</button>
+        <button onclick="toggleSettings()" class="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">⚙️</button>
       </div>
     </div>
 
     <!-- 상태 메시지 -->
-    <p id="status-msg" class="text-xs text-slate-500 mb-3">로딩 중...</p>
+    <p id="status-msg" class="text-[11px] text-slate-500 mb-4 h-4 flex items-center gap-1"></p>
+
+    <!-- 설정 및 수동 입력 패널 -->
+    <div id="settings-panel" class="hidden mb-6 bg-slate-800 rounded-2xl p-5 shadow-2xl border border-slate-700/50">
+      <div class="space-y-4">
+        <div>
+          <h2 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">API & Gist 설정</h2>
+          <div class="space-y-2">
+            <input id="inp-gist-id" type="text" placeholder="Gist ID" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500">
+            <input id="inp-token" type="password" placeholder="GitHub Token" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500">
+            <input id="inp-finnhub" type="password" placeholder="Finnhub API Key" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500">
+          </div>
+        </div>
+
+        <div class="pt-2">
+          <h2 class="text-xs font-bold text-orange-400 uppercase tracking-wider mb-3 flex items-center gap-1">
+            ⚠️ 수동 가격 입력 (Fetch 실패 시)
+          </h2>
+          <div class="grid grid-cols-2 gap-3">
+            <div class="space-y-1">
+              <label class="text-[10px] text-slate-500 px-1">QQQ 현재가 / ATH</label>
+              <div class="flex gap-1">
+                <input id="m-qqq-p" type="number" step="0.01" placeholder="0.00" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-2 text-sm outline-none">
+                <input id="m-qqq-a" type="number" step="0.01" placeholder="0.00" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-2 text-sm outline-none text-orange-200">
+              </div>
+            </div>
+            <div class="space-y-1">
+              <label class="text-[10px] text-slate-500 px-1">SOXX 현재가 / ATH</label>
+              <div class="flex gap-1">
+                <input id="m-soxx-p" type="number" step="0.01" placeholder="0.00" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-2 text-sm outline-none">
+                <input id="m-soxx-a" type="number" step="0.01" placeholder="0.00" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-2 text-sm outline-none text-orange-200">
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="flex gap-2 pt-2">
+          <button onclick="saveSettings()" class="flex-1 py-3 bg-blue-600 hover:bg-blue-500 rounded-xl text-sm font-bold shadow-lg shadow-blue-900/20">설정 저장</button>
+          <button onclick="applyManual()" class="flex-1 py-3 bg-orange-600 hover:bg-orange-500 rounded-xl text-sm font-bold shadow-lg shadow-orange-900/20">수동 적용</button>
+        </div>
+      </div>
+    </div>
 
     <!-- 카드 영역 -->
     <div id="card-QQQ"></div>
     <div id="card-SOXX"></div>
 
-    <!-- 저장 버튼 -->
-    <button onclick="saveChanges()"
-      class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 rounded-xl font-bold text-sm mt-2">
+    <!-- 하단 저장 버튼 -->
+    <button id="save-btn" onclick="saveChanges()"
+      class="w-full py-4 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 rounded-2xl font-bold text-base mt-2 shadow-xl shadow-emerald-900/20 transition-all">
       💾 변경사항 Gist에 저장
     </button>
-
   </div>
+
   <script>
-  let stockData = null;
-  let prices    = {};
+    let stockData = null;
+    let prices = { QQQ: { current: 0, ath: 0 }, SOXX: { current: 0, ath: 0 } };
 
-  // ── 설정 ──────────────────────────────────────────────
-  const getConfig = () => ({
-    gistId: localStorage.getItem('gist_id')    || '',
-    token:  localStorage.getItem('gist_token') || ''
-  });
-
-  function toggleSettings() {
-    const p = document.getElementById('settings-panel');
-    p.classList.toggle('hidden');
-    if (!p.classList.contains('hidden')) {
-      const c = getConfig();
-      document.getElementById('inp-gist-id').value = c.gistId;
-      document.getElementById('inp-token').value   = c.token;
-      document.getElementById('inp-finnhub').value = localStorage.getItem('finnhub_token') || '';
-    }
-  }
-
-  function saveSettings() {
-    localStorage.setItem('gist_id',       document.getElementById('inp-gist-id').value.trim());
-    localStorage.setItem('gist_token',    document.getElementById('inp-token').value.trim());
-    localStorage.setItem('finnhub_token', document.getElementById('inp-finnhub').value.trim());
-    document.getElementById('settings-panel').classList.add('hidden');
-    init();
-  }
-
-  // ── Gist ──────────────────────────────────────────────
-  async function fetchGistData() {
-    const { gistId, token } = getConfig();
-    if (!gistId || !token) return false;
-    try {
-      const res = await fetch(`https://api.github.com/gists/${gistId}`,
-        { headers: { Authorization: `token ${token}` } });
-      const j   = await res.json();
-      const raw = j.files?.['stock_data.json']?.content;
-      if (raw) { stockData = JSON.parse(raw); return true; }
-    } catch(e) { setStatus('Gist 읽기 실패: ' + e.message); }
-    return false;
-  }
-
-  async function patchGist() {
-    const { gistId, token } = getConfig();
-    const res = await fetch(`https://api.github.com/gists/${gistId}`, {
-      method:  'PATCH',
-      headers: { Authorization: `token ${token}`, 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ files: { 'stock_data.json': { content: JSON.stringify(stockData, null, 2) } } })
+    // ─────────────────────────────────────────────────────────────────────────
+    // 1. 유틸리티 & 설정
+    // ─────────────────────────────────────────────────────────────────────────
+    const getConfig = () => ({
+      gistId: localStorage.getItem('gist_id') || '',
+      token: localStorage.getItem('gist_token') || '',
+      finnhub: localStorage.getItem('finnhub_token') || ''
     });
-    return res.ok;
-  }
 
-  // ── 가격 Fetch ────────────────────────────────────────
-// ─────────────────────────────────────────────
-// Stock Alarm용 개선된 Finnhub 가격 fetch
-// (quote API 단일 호출, metric optional fallback)
-// ─────────────────────────────────────────────
-  async function fetchFinnhub(ticker) {
-    const key = localStorage.getItem('finnhub_token') || '';
-    if (!key) return null;
-
-    try {
-      // 1) 기본 quote API 호출 (가장 안정적)
-      const res = await fetch(
-        `https://finnhub.io/api/v1/quote?symbol=${ticker}&token=${key}`,
-        { cache: 'no-store' }
-      );
-      const q = await res.json();
-
-      // p = 현재가(c) 또는 fallback(pc)
-      const current = q.c > 0 ? q.c : q.pc;
-      if (!current) return null;
-
-      // 2) metric API는 성공하면 ATH 사용, 실패해도 무시
-      let ath = current;
-      try {
-        const mRes = await fetch(
-          `https://finnhub.io/api/v1/stock/metric?symbol=${ticker}&metric=all&token=${key}`,
-          { cache: 'no-store' }
-        );
-        const m = await mRes.json();
-        if (m.metric?.['52WeekHigh'] > 0) {
-          ath = m.metric['52WeekHigh'];
-        }
-      } catch (_) {
-        // metric은 실패해도 괜찮다 (fallback으로 current 그대로 사용)
-      }
-
-      return { current, ath };
-    } catch (_) {
-      return null;
-    }
-  }
-
-  async function fetchYahoo(ticker) {
-    const base = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=5y`;
-    const proxies = [
-      `https://corsproxy.io/?${encodeURIComponent(base)}`,
-      `https://api.allorigins.win/raw?url=${encodeURIComponent(base)}`,
-      base
-    ];
-    for (const url of proxies) {
-      try {
-        const ctrl = new AbortController();
-        const timer = setTimeout(() => ctrl.abort(), 10000);
-        const r = await fetch(url, { signal: ctrl.signal });
-        clearTimeout(timer);
-        const j      = await r.json();
-        const raw    = j.chart?.result?.[0]?.indicators?.quote?.[0]?.close ?? [];
-        const closes = raw.filter(c => c != null);
-        if (!closes.length) continue;
-        const ath = closes.reduce((a, b) => b > a ? b : a, 0);
-        return { current: closes[closes.length - 1], ath };
-      } catch { continue; }
-    }
-    return null;
-  }
-
-  const fetchPrice = async ticker => (await fetchFinnhub(ticker)) ?? (await fetchYahoo(ticker));
-
-  // ── 상태 계산 ─────────────────────────────────────────
-  function calcInfi(ticker, highAfterEnd, currP, athNow) {
-    const ref   = Math.max(highAfterEnd || 0, athNow);
-    const drop  = ref > 0 ? (currP / ref - 1) * 100 : 0;
-    const limit = ticker === 'QQQ' ? -3 : -4;
-    const sub   = `기준 $${ref.toFixed(1)} · 현재 ${drop.toFixed(1)}%`;
-    if (drop <= limit)       return { label: '🚨 즉시매수', cls: 'text-red-400 font-bold', sub };
-    if (drop <= limit + 1.5) return { label: '🟡 진입준비', cls: 'text-yellow-400',        sub };
-    return                          { label: '✅ 대기',     cls: 'text-slate-400',          sub };
-  }
-
-  function calcCycle(ticker, status, targetATH, currP, athNow) {
-    if (status === 'ACTIVE') {
-      const r1   = ticker === 'QQQ' ? 1.2  : 1.3;
-      const r2   = ticker === 'QQQ' ? 1.24 : 1.34;
-      const dist = (currP / (targetATH * r1) - 1) * 100;
-      const sub  = `박제 $${targetATH.toFixed(1)} · 익절까지 ${dist.toFixed(1)}%`;
-      if (currP >= targetATH * r2) return { label: '🔥 2차익절 도달',                 cls: 'text-red-400 font-bold',    sub };
-      if (currP >= targetATH * r1) return { label: '💰 1차익절 도달',                 cls: 'text-orange-400 font-bold', sub };
-      if (dist  >= -5)             return { label: `🟢 익절근접 ${dist.toFixed(1)}%`, cls: 'text-green-400',            sub };
-      return                              { label: `🟢 대기 ${dist.toFixed(1)}%`,     cls: 'text-slate-400',            sub };
-    }
-    const drop = (currP / athNow - 1) * 100;
-    const sub  = `ATH $${athNow.toFixed(1)} · 현재 ${drop.toFixed(1)}%`;
-    const tgts = ticker === 'QQQ'
-      ? [[-19,'T사이클'],[-20,'T퇴연'],[-21,'T사이클2'],[-30,'T하드']]
-      : [[-20,'S사이클'],[-22,'S퇴연'],[-25,'S사이클2'],[-35,'S하드'],[-40,'S하드2']];
-    for (const [pct, name] of tgts) {
-      if (drop <= pct)     return { label: `🚨 ${name} 즉시매수`, cls: 'text-red-400 font-bold', sub };
-      if (drop <= pct + 5) return { label: `🟡 ${name} 근접`,    cls: 'text-yellow-400',         sub };
-    }
-    return { label: '⚪ 관망', cls: 'text-slate-400', sub };
-  }
-
-  // ── 렌더 ──────────────────────────────────────────────
-  function badge(s) {
-    const map = {
-      READY:  'bg-slate-600 text-slate-300',
-      ACTIVE: 'bg-green-800 text-green-300',
-      PAUSED: 'bg-yellow-800 text-yellow-300'
+    const setStatus = msg => { 
+      const el = document.getElementById('status-msg');
+      el.innerHTML = msg ? `<span>●</span> ${msg}` : ''; 
     };
-    return `<span class="text-[10px] px-1.5 py-0.5 rounded ${map[s] || 'bg-slate-600'}">${s}</span>`;
-  }
 
-  function statusRow(name, bdg, st) {
-    return `
-      <div class="bg-slate-700/40 rounded-lg px-3 py-2 mb-2">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-1.5 text-xs text-slate-400">${name}${bdg ? ' ' + bdg : ''}</div>
-          <span class="${st.cls} text-xs font-medium">${st.label}</span>
+    const now = () => new Date().toLocaleTimeString('ko-KR', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+    function toggleSettings() {
+      const p = document.getElementById('settings-panel');
+      p.classList.toggle('hidden');
+      if (!p.classList.contains('hidden')) {
+        const c = getConfig();
+        document.getElementById('inp-gist-id').value = c.gistId;
+        document.getElementById('inp-token').value = c.token;
+        document.getElementById('inp-finnhub').value = c.finnhub;
+      }
+    }
+
+    function saveSettings() {
+      localStorage.setItem('gist_id', document.getElementById('inp-gist-id').value.trim());
+      localStorage.setItem('gist_token', document.getElementById('inp-token').value.trim());
+      localStorage.setItem('finnhub_token', document.getElementById('inp-finnhub').value.trim());
+      setStatus('설정 저장됨');
+      toggleSettings();
+      init();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 2. 가격 Fetch & ATH 자동 관리
+    // ─────────────────────────────────────────────────────────────────────────
+    async function fetchPrice(ticker) {
+      const { finnhub } = getConfig();
+      if (!finnhub) return await fetchYahoo(ticker);
+
+      try {
+        // 단일 quote API만 사용하여 속도와 안정성 확보
+        const res = await fetch(`https://finnhub.io/api/v1/quote?symbol=${ticker}&token=${finnhub}`, { cache: 'no-store' });
+        const q = await res.json();
+        const current = q.c > 0 ? q.c : q.pc;
+        if (!current) throw new Error('No data');
+
+        // ATH 자동 관리: 기존 ATH보다 크면 갱신
+        let savedATH = stockData?.[ticker]?.ATH || 0;
+        const finalATH = Math.max(savedATH, current);
+        
+        return { current, ath: finalATH };
+      } catch (e) {
+        return await fetchYahoo(ticker);
+      }
+    }
+
+    async function fetchYahoo(ticker) {
+      const base = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=5y`;
+      const proxy = `https://corsproxy.io/?${encodeURIComponent(base)}`;
+      try {
+        const r = await fetch(proxy);
+        const j = await r.json();
+        const res = j.chart?.result?.[0];
+        const current = res?.meta?.regularMarketPrice;
+        const closes = res?.indicators?.quote?.[0]?.close?.filter(c => c != null) || [];
+        const histATH = closes.length ? Math.max(...closes) : 0;
+        
+        let savedATH = stockData?.[ticker]?.ATH || 0;
+        const finalATH = Math.max(savedATH, histATH, current);
+
+        return { current, ath: finalATH };
+      } catch { return null; }
+    }
+
+    function applyManual() {
+      ['QQQ', 'SOXX'].forEach(t => {
+        const cp = parseFloat(document.getElementById(`m-${t.toLowerCase()}-p`).value);
+        const ca = parseFloat(document.getElementById(`m-${t.toLowerCase()}-a`).value);
+        if (cp) prices[t].current = cp;
+        if (ca) prices[t].ath = ca;
+      });
+      renderAll();
+      setStatus('수동 가격 적용됨 · ' + now());
+      document.getElementById('settings-panel').classList.add('hidden');
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 3. Gist 통신
+    // ─────────────────────────────────────────────────────────────────────────
+    async function fetchGistData() {
+      const { gistId, token } = getConfig();
+      if (!gistId || !token) return false;
+      try {
+        const res = await fetch(`https://api.github.com/gists/${gistId}`, {
+          headers: { Authorization: `token ${token}` },
+          cache: 'no-store'
+        });
+        const j = await res.json();
+        const raw = j.files?.['stock_data.json']?.content;
+        if (raw) { stockData = JSON.parse(raw); return true; }
+      } catch (e) { setStatus('Gist 로드 실패'); }
+      return false;
+    }
+
+    async function saveChanges() {
+      if (!stockData) return;
+      const { gistId, token } = getConfig();
+      
+      const btn = document.getElementById('save-btn');
+      btn.disabled = true;
+      btn.textContent = '저장 중...';
+
+      // 폼 데이터 반영 + 현재 가격 기반 ATH 갱신 박제
+      ['QQQ', 'SOXX'].forEach(t => {
+        if (!stockData[t]) stockData[t] = {};
+        stockData[t].Infi = { High_After_End: parseFloat(document.getElementById(`${t}-infi`).value) || 0 };
+        stockData[t].New = { Status: document.getElementById(`${t}-new-st`).value, Target_ATH: parseFloat(document.getElementById(`${t}-new-ath`).value) || 0 };
+        stockData[t].Old = { Status: document.getElementById(`${t}-old-st`).value, Target_ATH: parseFloat(document.getElementById(`${t}-old-ath`).value) || 0 };
+        // 개편 핵심: 자동 갱신된 ATH를 Gist에 박제
+        stockData[t].ATH = prices[t].ath; 
+      });
+
+      try {
+        const res = await fetch(`https://api.github.com/gists/${gistId}`, {
+          method: 'PATCH',
+          headers: { Authorization: `token ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ files: { 'stock_data.json': { content: JSON.stringify(stockData, null, 2) } } })
+        });
+        if (res.ok) setStatus('✅ Gist 저장 완료 · ' + now());
+        else throw new Error();
+      } catch { setStatus('❌ 저장 실패'); }
+      
+      btn.disabled = false;
+      btn.textContent = '💾 변경사항 Gist에 저장';
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 4. 로직 & 렌더링
+    // ─────────────────────────────────────────────────────────────────────────
+    function calcInfi(ticker, hae, cp, ath) {
+      const ref = Math.max(hae || 0, ath);
+      const drop = (cp / ref - 1) * 100;
+      const limit = ticker === 'QQQ' ? -3 : -4;
+      const sub = `기준 $${ref.toFixed(1)} (${drop.toFixed(1)}%)`;
+      if (drop <= limit) return { label: '🚨 즉시매수', cls: 'text-red-400 font-bold', sub };
+      if (drop <= limit + 1.5) return { label: '🟡 진입준비', cls: 'text-yellow-400', sub };
+      return { label: '✅ 대기', cls: 'text-slate-500', sub };
+    }
+
+    function calcCycle(ticker, status, targetATH, cp, ath) {
+      if (status === 'ACTIVE') {
+        const r1 = ticker === 'QQQ' ? 1.2 : 1.3;
+        const r2 = ticker === 'QQQ' ? 1.24 : 1.34;
+        const dist = (cp / (targetATH * r1) - 1) * 100;
+        const sub = `박제 $${targetATH.toFixed(1)} → 익절까지 ${dist.toFixed(1)}%`;
+        if (cp >= targetATH * r2) return { label: '🔥 2차익절 도달', cls: 'text-red-400 font-bold', sub };
+        if (cp >= targetATH * r1) return { label: '💰 1차익절 도달', cls: 'text-orange-400 font-bold', sub };
+        return { label: `🟢 익절 감시중`, cls: 'text-green-400', sub };
+      }
+      // READY 상태
+      const drop = (cp / ath - 1) * 100;
+      const tgts = ticker === 'QQQ' ? [[-19,'T사이클'],[-20,'T퇴연']] : [[-20,'S사이클'],[-22,'S퇴연']];
+      for (const [pct, name] of tgts) {
+        if (drop <= pct) return { label: `🚨 ${name} 매수`, cls: 'text-red-400 font-bold', sub: `ATH대비 ${drop.toFixed(1)}%` };
+        if (drop <= pct + 5) return { label: `🟡 ${name} 근접`, cls: 'text-yellow-400', sub: `ATH대비 ${drop.toFixed(1)}%` };
+      }
+      return { label: '⚪ 관망', cls: 'text-slate-500', sub: `ATH대비 ${drop.toFixed(1)}%` };
+    }
+
+    function renderCard(ticker) {
+      const cp = prices[ticker].current;
+      const ath = prices[ticker].ath;
+      const data = stockData?.[ticker] || {};
+      const drop = ath > 0 ? (cp / ath - 1) * 100 : 0;
+      const dropCls = drop <= -15 ? 'text-red-400' : drop <= -5 ? 'text-yellow-400' : 'text-green-400';
+
+      const html = `
+        <div class="bg-slate-800 rounded-2xl p-5 mb-4 shadow-xl border border-slate-700/30">
+          <div class="flex justify-between items-end mb-4">
+            <div>
+              <h3 class="text-xl font-black tracking-tight">${ticker}</h3>
+              <p class="text-[10px] text-slate-500 uppercase tracking-widest mt-1">Market Strategy</p>
+            </div>
+            <div class="text-right">
+              <div class="text-2xl font-black ${dropCls}">${drop.toFixed(1)}%</div>
+              <div class="text-[11px] text-slate-400 font-medium">$${cp.toFixed(2)} / $${ath.toFixed(1)}</div>
+            </div>
+          </div>
+
+          <div class="space-y-2">
+            ${statusRow('무한매수', '', calcInfi(ticker, data.Infi?.High_After_End, cp, ath))}
+            ${statusRow('New 사이클', badge(data.New?.Status), calcCycle(ticker, data.New?.Status, data.New?.Target_ATH, cp, ath))}
+            ${statusRow('Old 사이클', badge(data.Old?.Status), calcCycle(ticker, data.Old?.Status, data.Old?.Target_ATH, cp, ath))}
+          </div>
+
+          <button onclick="document.getElementById('edit-${ticker}').classList.toggle('hidden')" class="w-full mt-4 pt-3 border-t border-slate-700/50 text-[11px] text-slate-500 flex justify-between">
+            <span>STRATEGY SETTINGS</span><span>▼</span>
+          </button>
+
+          <div id="edit-${ticker}" class="hidden pt-4 space-y-4">
+            <div class="bg-slate-900/50 p-3 rounded-xl space-y-3">
+              <div>
+                <label class="text-[10px] text-slate-500 block mb-1">무매 매도시점가 (HAE)</label>
+                <input id="${ticker}-infi" type="number" step="0.01" value="${data.Infi?.High_After_End || 0}" class="w-full bg-slate-800 rounded-lg px-3 py-2 text-sm outline-none">
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="text-[10px] text-slate-500 block mb-1">New 상태</label>
+                  <select id="${ticker}-new-st" class="w-full bg-slate-800 rounded-lg px-2 py-2 text-sm outline-none">
+                    ${['READY','ACTIVE','PAUSED'].map(s=>`<option ${data.New?.Status===s?'selected':''}>${s}</option>`).join('')}
+                  </select>
+                </div>
+                <div>
+                  <label class="text-[10px] text-slate-500 block mb-1">New 박제 ATH</label>
+                  <input id="${ticker}-new-ath" type="number" step="0.01" value="${data.New?.Target_ATH || 0}" class="w-full bg-slate-800 rounded-lg px-3 py-2 text-sm outline-none">
+                </div>
+              </div>
+              <div class="grid grid-cols-2 gap-2 border-t border-slate-700/30 pt-3">
+                <div>
+                  <label class="text-[10px] text-slate-500 block mb-1">Old 상태</label>
+                  <select id="${ticker}-old-st" class="w-full bg-slate-800 rounded-lg px-2 py-2 text-sm outline-none">
+                    ${['READY','ACTIVE','PAUSED'].map(s=>`<option ${data.Old?.Status===s?'selected':''}>${s}</option>`).join('')}
+                  </select>
+                </div>
+                <div>
+                  <label class="text-[10px] text-slate-500 block mb-1">Old 박제 ATH</label>
+                  <input id="${ticker}-old-ath" type="number" step="0.01" value="${data.Old?.Target_ATH || 0}" class="w-full bg-slate-800 rounded-lg px-3 py-2 text-sm outline-none">
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>`;
+      document.getElementById(`card-${ticker}`).innerHTML = html;
+    }
+
+    function statusRow(n, b, s) {
+      return `<div class="flex items-center justify-between bg-slate-700/20 p-3 rounded-xl border border-white/5">
+        <div>
+          <div class="text-[11px] text-slate-400 flex items-center gap-1.5">${n} ${b}</div>
+          <div class="text-[10px] text-slate-500 mt-0.5">${s.sub}</div>
         </div>
-        <div class="text-[10px] text-slate-500 mt-0.5">${st.sub}</div>
+        <div class="${s.cls} text-sm">${s.label}</div>
       </div>`;
-  }
-
-  function renderCard(ticker) {
-    const el = document.getElementById(`card-${ticker}`);
-    if (!prices[ticker]) {
-      el.innerHTML = `<div class="bg-slate-800 rounded-xl p-4 mb-4 text-sm text-slate-500">${ticker} 가격 로딩 중...</div>`;
-      return;
     }
-    const { current: cp, ath } = prices[ticker];
-    const td  = stockData?.[ticker] || {};
-    const inf = td.Infi || {};
-    const nc  = td.New  || { Status: 'READY', Target_ATH: 0 };
-    const oc  = td.Old  || { Status: 'READY', Target_ATH: 0 };
 
-    const od     = (cp / ath - 1) * 100;
-    const odCls  = od <= -15 ? 'text-red-400' : od <= -5 ? 'text-yellow-400' : 'text-green-400';
-    const infiSt = calcInfi(ticker, inf.High_After_End || 0, cp, ath);
-    const newSt  = calcCycle(ticker, nc.Status, nc.Target_ATH, cp, ath);
-    const oldSt  = calcCycle(ticker, oc.Status, oc.Target_ATH, cp, ath);
-    const lbl    = ticker === 'QQQ' ? '📊 QQQ — T사이클 기준' : '📊 SOXX — S사이클 기준';
-
-    el.innerHTML = `
-      <div class="bg-slate-800 rounded-xl p-4 mb-4">
-        <div class="flex items-center justify-between mb-3">
-          <span class="font-bold text-sm">${lbl}</span>
-          <span class="${odCls} text-sm font-bold">${od.toFixed(1)}%</span>
-        </div>
-        <div class="grid grid-cols-3 gap-2 mb-3">
-          <div class="bg-slate-700 rounded-lg p-2 text-center">
-            <div class="text-[10px] text-slate-400">현재가</div>
-            <div class="text-sm font-bold">$${cp.toFixed(2)}</div>
-          </div>
-          <div class="bg-slate-700 rounded-lg p-2 text-center">
-            <div class="text-[10px] text-slate-400">ATH</div>
-            <div class="text-sm font-bold">$${ath.toFixed(2)}</div>
-          </div>
-          <div class="bg-slate-700 rounded-lg p-2 text-center">
-            <div class="text-[10px] text-slate-400">ATH 대비</div>
-            <div class="text-sm font-bold ${odCls}">${od.toFixed(1)}%</div>
-          </div>
-        </div>
-        ${statusRow('무한매수', '', infiSt)}
-        ${statusRow('New 사이클', badge(nc.Status), newSt)}
-        ${statusRow('Old 사이클', badge(oc.Status), oldSt)}
-        <button onclick="toggleEdit('${ticker}')"
-          class="w-full flex justify-between items-center text-xs text-slate-500 border-t border-slate-700 pt-2 mt-1">
-          <span>⚙️ 전략 수정</span><span id="arr-${ticker}">▼</span>
-        </button>
-        <div id="edit-${ticker}" class="hidden mt-3 space-y-3">
-          <div>
-            <label class="text-xs text-slate-400">무매 매도시점가 (High_After_End)</label>
-            <input id="${ticker}-infi" type="number" step="0.01" value="${(inf.High_After_End || 0).toFixed(2)}"
-              class="w-full bg-slate-700 rounded px-3 py-2 text-sm mt-1 outline-none">
-          </div>
-          <div class="grid grid-cols-2 gap-2">
-            <div>
-              <label class="text-xs text-slate-400">New 상태</label>
-              <select id="${ticker}-new-st" class="w-full bg-slate-700 rounded px-2 py-2 text-sm mt-1 outline-none">
-                ${['READY','ACTIVE','PAUSED'].map(s => `<option ${nc.Status===s?'selected':''}>${s}</option>`).join('')}
-              </select>
-            </div>
-            <div>
-              <label class="text-xs text-slate-400">New 박제 ATH</label>
-              <input id="${ticker}-new-ath" type="number" step="0.01" value="${(nc.Target_ATH || 0).toFixed(2)}"
-                class="w-full bg-slate-700 rounded px-3 py-2 text-sm mt-1 outline-none">
-            </div>
-          </div>
-          <div class="grid grid-cols-2 gap-2">
-            <div>
-              <label class="text-xs text-slate-400">Old 상태</label>
-              <select id="${ticker}-old-st" class="w-full bg-slate-700 rounded px-2 py-2 text-sm mt-1 outline-none">
-                ${['READY','ACTIVE','PAUSED'].map(s => `<option ${oc.Status===s?'selected':''}>${s}</option>`).join('')}
-              </select>
-            </div>
-            <div>
-              <label class="text-xs text-slate-400">Old 박제 ATH</label>
-              <input id="${ticker}-old-ath" type="number" step="0.01" value="${(oc.Target_ATH || 0).toFixed(2)}"
-                class="w-full bg-slate-700 rounded px-3 py-2 text-sm mt-1 outline-none">
-            </div>
-          </div>
-        </div>
-      </div>`;
-  }
-
-  function toggleEdit(ticker) {
-    const el  = document.getElementById(`edit-${ticker}`);
-    const arr = document.getElementById(`arr-${ticker}`);
-    el.classList.toggle('hidden');
-    arr.textContent = el.classList.contains('hidden') ? '▼' : '▲';
-  }
-
-  // ── 저장 ──────────────────────────────────────────────
-  async function saveChanges() {
-    if (!stockData) { alert('데이터를 먼저 로드해주세요.'); return; }
-    for (const t of ['QQQ', 'SOXX']) {
-      if (!stockData[t]) stockData[t] = {};
-      const infiEl   = document.getElementById(`${t}-infi`);
-      const newStEl  = document.getElementById(`${t}-new-st`);
-      const newAthEl = document.getElementById(`${t}-new-ath`);
-      const oldStEl  = document.getElementById(`${t}-old-st`);
-      const oldAthEl = document.getElementById(`${t}-old-ath`);
-      if (!infiEl) continue;
-      stockData[t].Infi = { High_After_End: parseFloat(infiEl.value) || 0 };
-      stockData[t].New  = { Status: newStEl.value,  Target_ATH: parseFloat(newAthEl.value) || 0 };
-      stockData[t].Old  = { Status: oldStEl.value, Target_ATH: parseFloat(oldAthEl.value) || 0 };
+    function badge(s) {
+      const cls = s==='ACTIVE'?'bg-emerald-500/10 text-emerald-500':s==='PAUSED'?'bg-amber-500/10 text-amber-500':'bg-slate-500/10 text-slate-500';
+      return `<span class="text-[9px] px-1.5 py-0.5 rounded ${cls} font-bold border border-current/20">${s}</span>`;
     }
-    setStatus('저장 중...');
-    const ok = await patchGist();
-    setStatus(ok ? '✅ 저장 완료 · ' + now() : '❌ 저장 실패');
-  }
 
-  // ── 유틸 / 진입점 ─────────────────────────────────────
-  function applyManualPrices() {
-    const qp = parseFloat(document.getElementById('manual-qqq-p').value);
-    const qa = parseFloat(document.getElementById('manual-qqq-a').value);
-    const sp = parseFloat(document.getElementById('manual-soxx-p').value);
-    const sa = parseFloat(document.getElementById('manual-soxx-a').value);
-    if (qp && qa) prices['QQQ']  = { current: qp, ath: qa };
-    if (sp && sa) prices['SOXX'] = { current: sp, ath: sa };
-    renderCard('QQQ'); renderCard('SOXX');
-    setStatus('수동 가격 적용됨 · ' + now());
-    document.getElementById('settings-panel').classList.add('hidden');
-  }
+    function renderAll() { renderCard('QQQ'); renderCard('SOXX'); }
 
-  const setStatus = msg => { document.getElementById('status-msg').textContent = msg; };
-  const now = () => new Date().toLocaleTimeString('ko-KR');
-
-  async function refreshAll() {
-    setStatus('새로고침 중...');
-    renderCard('QQQ'); renderCard('SOXX');
-    await Promise.all([
-      fetchGistData(),
-      fetchYahoo('QQQ').then(d  => { if (d) prices['QQQ']  = d; }),
-      fetchYahoo('SOXX').then(d => { if (d) prices['SOXX'] = d; })
-    ]);
-    renderCard('QQQ'); renderCard('SOXX');
-    setStatus('✅ 로드 완료 · ' + now());
-  }
-
-  async function init() {
-    const { gistId, token } = getConfig();
-    if (!gistId || !token) {
-      setStatus('⚙️ 설정을 눌러 Gist 정보를 입력해주세요.');
-      document.getElementById('settings-panel').classList.remove('hidden');
-      document.getElementById('inp-gist-id').value = gistId;
-      document.getElementById('inp-token').value   = token;
-      renderCard('QQQ'); renderCard('SOXX');
-      await Promise.all([
-        fetchPrice('QQQ').then(d  => { if (d) prices['QQQ']  = d; }),
-        fetchPrice('SOXX').then(d => { if (d) prices['SOXX'] = d; })
-      ]);
-      renderCard('QQQ'); renderCard('SOXX');
-      setStatus('⚙️ Gist 설정 필요 — 가격만 표시 중');
-      return;
+    async function refreshAll() {
+      setStatus('데이터 동기화 중...');
+      await fetchGistData();
+      const [q, s] = await Promise.all([fetchPrice('QQQ'), fetchPrice('SOXX')]);
+      if (q) prices.QQQ = q;
+      if (s) prices.SOXX = s;
+      renderAll();
+      setStatus('✅ 업데이트 완료 · ' + now());
     }
-    await refreshAll();
-  }
 
-  init();
+    async function init() {
+      const c = getConfig();
+      if (!c.gistId || !c.token) {
+        setStatus('⚙️ Gist 설정을 완료해주세요.');
+        toggleSettings();
+      } else {
+        await refreshAll();
+      }
+    }
+
+    init();
   </script>
 </body>
 </html>
