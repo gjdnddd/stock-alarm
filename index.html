@@ -32,6 +32,11 @@
           <input id="inp-token" type="password" placeholder="ghp_..."
             class="w-full bg-slate-700 rounded px-3 py-2 text-sm mt-1 outline-none">
         </div>
+        <div>
+          <label class="text-xs text-slate-400">Finnhub API Key <span class="text-slate-500">(finnhub.io 무료 발급)</span></label>
+          <input id="inp-finnhub" type="password" placeholder="d1234..."
+            class="w-full bg-slate-700 rounded px-3 py-2 text-sm mt-1 outline-none">
+        </div>
         <button onclick="saveSettings()"
           class="w-full py-2 bg-blue-600 rounded text-sm font-medium mt-1">저장 후 로드</button>
       </div>
@@ -95,12 +100,14 @@
       const c = getConfig();
       document.getElementById('inp-gist-id').value = c.gistId;
       document.getElementById('inp-token').value   = c.token;
+      document.getElementById('inp-finnhub').value = localStorage.getItem('finnhub_token') || '';
     }
   }
 
   function saveSettings() {
-    localStorage.setItem('gist_id',    document.getElementById('inp-gist-id').value.trim());
-    localStorage.setItem('gist_token', document.getElementById('inp-token').value.trim());
+    localStorage.setItem('gist_id',       document.getElementById('inp-gist-id').value.trim());
+    localStorage.setItem('gist_token',    document.getElementById('inp-token').value.trim());
+    localStorage.setItem('finnhub_token', document.getElementById('inp-finnhub').value.trim());
     document.getElementById('settings-panel').classList.add('hidden');
     init();
   }
@@ -129,7 +136,27 @@
     return res.ok;
   }
 
-  // ── 가격 Fetch (Yahoo Finance) ─────────────────────────
+  // ── 가격 Fetch ────────────────────────────────────────
+  async function fetchFinnhub(ticker) {
+    const key = localStorage.getItem('finnhub_token') || '';
+    if (!key) return null;
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 8000);
+      const [qRes, mRes] = await Promise.all([
+        fetch(`https://finnhub.io/api/v1/quote?symbol=${ticker}&token=${key}`, { signal: ctrl.signal }),
+        fetch(`https://finnhub.io/api/v1/stock/metric?symbol=${ticker}&metric=all&token=${key}`)
+      ]);
+      clearTimeout(timer);
+      const q   = await qRes.json();
+      const m   = await mRes.json();
+      const current = q.c;
+      const ath     = m.metric?.['52WeekHigh'] || current;
+      if (!current) return null;
+      return { current, ath };
+    } catch { return null; }
+  }
+
   async function fetchYahoo(ticker) {
     const base = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=5y`;
     const proxies = [
@@ -153,6 +180,8 @@
     }
     return null;
   }
+
+  const fetchPrice = async ticker => (await fetchFinnhub(ticker)) ?? (await fetchYahoo(ticker));
 
   // ── 상태 계산 ─────────────────────────────────────────
   function calcInfi(ticker, highAfterEnd, currP, athNow) {
@@ -355,8 +384,8 @@
       document.getElementById('inp-token').value   = token;
       renderCard('QQQ'); renderCard('SOXX');
       await Promise.all([
-        fetchYahoo('QQQ').then(d  => { if (d) prices['QQQ']  = d; }),
-        fetchYahoo('SOXX').then(d => { if (d) prices['SOXX'] = d; })
+        fetchPrice('QQQ').then(d  => { if (d) prices['QQQ']  = d; }),
+        fetchPrice('SOXX').then(d => { if (d) prices['SOXX'] = d; })
       ]);
       renderCard('QQQ'); renderCard('SOXX');
       setStatus('⚙️ Gist 설정 필요 — 가격만 표시 중');
