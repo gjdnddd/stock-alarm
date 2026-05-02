@@ -140,21 +140,25 @@
   async function fetchFinnhub(ticker) {
     const key = localStorage.getItem('finnhub_token') || '';
     if (!key) return null;
+
     try {
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 8000);
-      const [qRes, mRes] = await Promise.all([
-        fetch(`https://finnhub.io/api/v1/quote?symbol=${ticker}&token=${key}`, { signal: ctrl.signal }),
-        fetch(`https://finnhub.io/api/v1/stock/metric?symbol=${ticker}&metric=all&token=${key}`)
-      ]);
-      clearTimeout(timer);
-      const q   = await qRes.json();
-      const m   = await mRes.json();
+      const qRes = await fetch(`https://finnhub.io/api/v1/quote?symbol=${ticker}&token=${key}`);
+      const q = await qRes.json();
       const current = q.c;
-      const ath     = m.metric?.['52WeekHigh'] || current;
       if (!current) return null;
+
+      // metric은 실패해도 허용
+      let ath = current;
+      try {
+        const mRes = await fetch(`https://finnhub.io/api/v1/stock/metric?symbol=${ticker}&metric=all&token=${key}`);
+        const m = await mRes.json();
+        if (m.metric?.['52WeekHigh']) ath = m.metric['52WeekHigh'];
+      } catch {}
+
       return { current, ath };
-    } catch { return null; }
+    } catch {
+    return null;
+    }
   }
 
   async function fetchYahoo(ticker) {
