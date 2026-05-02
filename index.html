@@ -137,27 +137,44 @@
   }
 
   // ── 가격 Fetch ────────────────────────────────────────
+// ─────────────────────────────────────────────
+// Stock Alarm용 개선된 Finnhub 가격 fetch
+// (quote API 단일 호출, metric optional fallback)
+// ─────────────────────────────────────────────
   async function fetchFinnhub(ticker) {
     const key = localStorage.getItem('finnhub_token') || '';
     if (!key) return null;
 
     try {
-      const qRes = await fetch(`https://finnhub.io/api/v1/quote?symbol=${ticker}&token=${key}`);
-      const q = await qRes.json();
-      const current = q.c;
+      // 1) 기본 quote API 호출 (가장 안정적)
+      const res = await fetch(
+        `https://finnhub.io/api/v1/quote?symbol=${ticker}&token=${key}`,
+        { cache: 'no-store' }
+      );
+      const q = await res.json();
+
+      // p = 현재가(c) 또는 fallback(pc)
+      const current = q.c > 0 ? q.c : q.pc;
       if (!current) return null;
 
-      // metric은 실패해도 허용
+      // 2) metric API는 성공하면 ATH 사용, 실패해도 무시
       let ath = current;
       try {
-        const mRes = await fetch(`https://finnhub.io/api/v1/stock/metric?symbol=${ticker}&metric=all&token=${key}`);
+        const mRes = await fetch(
+          `https://finnhub.io/api/v1/stock/metric?symbol=${ticker}&metric=all&token=${key}`,
+          { cache: 'no-store' }
+        );
         const m = await mRes.json();
-        if (m.metric?.['52WeekHigh']) ath = m.metric['52WeekHigh'];
-      } catch {}
+        if (m.metric?.['52WeekHigh'] > 0) {
+          ath = m.metric['52WeekHigh'];
+        }
+      } catch (_) {
+        // metric은 실패해도 괜찮다 (fallback으로 current 그대로 사용)
+      }
 
       return { current, ath };
-    } catch {
-    return null;
+    } catch (_) {
+      return null;
     }
   }
 
