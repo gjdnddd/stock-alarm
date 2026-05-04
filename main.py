@@ -1,6 +1,10 @@
 import os, yfinance as yf, requests, json
 from datetime import datetime
 
+def clean_env(name):
+    value = os.environ.get(name, "")
+    return value.strip().lstrip("\ufeff")
+
 class VisualAlarmEngine:
     def __init__(self):
         self.config = self.get_gist_state()
@@ -12,8 +16,8 @@ class VisualAlarmEngine:
         if test_config_path:
             with open(test_config_path, encoding='utf-8') as f:
                 return json.load(f)
-        token = os.environ.get('MY_GITHUB_TOKEN')
-        gist_id = os.environ.get('MY_GIST_ID')
+        token = clean_env('MY_GITHUB_TOKEN')
+        gist_id = clean_env('MY_GIST_ID')
         url = f"https://api.github.com/gists/{gist_id}"
         headers = {"Authorization": f"token {token}"}
         res = requests.get(url, headers=headers)
@@ -22,8 +26,8 @@ class VisualAlarmEngine:
     def save_gist_state(self):
         if os.environ.get('TEST_SKIP_GIST_SAVE', '').lower() in ('1', 'true', 'yes'):
             return
-        token = os.environ.get('MY_GITHUB_TOKEN')
-        gist_id = os.environ.get('MY_GIST_ID')
+        token = clean_env('MY_GITHUB_TOKEN')
+        gist_id = clean_env('MY_GIST_ID')
         url = f"https://api.github.com/gists/{gist_id}"
         headers = {"Authorization": f"token {token}"}
         payload = {"files": {"stock_data.json": {"content": json.dumps(self.config, indent=2)}}}
@@ -114,8 +118,8 @@ class VisualAlarmEngine:
 
     def save_and_send(self):
         if not self.report: return
-        token = os.environ.get('MY_TELEGRAM_TOKEN')
-        chat_id = os.environ.get('MY_CHAT_ID')
+        token = clean_env('MY_TELEGRAM_TOKEN')
+        chat_id = clean_env('MY_CHAT_ID')
         message = '\n\n'.join(self.report)
         if os.environ.get('TEST_MODE', '').lower() in ('1', 'true', 'yes'):
             message = "[TEST MODE]\n" + message
