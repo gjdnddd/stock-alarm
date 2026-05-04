@@ -1,0 +1,14 @@
+.env
+__pycache__/
+*.pyc
+manual_test_alarm.ps1
+stock_data.test.json
+us_s_st.py
+step_one.py
+step_two.py
+step_three.py
+step_four.py
+step_seven.py
+keep_alive.yml
+run_alarm.yml
+미국주식알람 개발과정.txt
