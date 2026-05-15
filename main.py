@@ -1,129 +1,232 @@
 import os, yfinance as yf, requests, json
-from datetime import datetime
 
 def clean_env(name):
-    value = os.environ.get(name, "")
-    return value.strip().lstrip("\ufeff")
+    return os.environ.get(name, "").strip().lstrip("﻿")
 
-class VisualAlarmEngine:
+
+class StockAlarm:
     def __init__(self):
-        self.config = self.get_gist_state()
-        self.report = []
+        self.config = self.load_config()
         self.config_updated = False
 
-    def get_gist_state(self):
-        test_config_path = os.environ.get('TEST_CONFIG_PATH')
-        if test_config_path:
-            with open(test_config_path, encoding='utf-8') as f:
+    def load_config(self):
+        test_path = os.environ.get('TEST_CONFIG_PATH')
+        if test_path:
+            with open(test_path, encoding='utf-8') as f:
                 return json.load(f)
-        token = clean_env('MY_GITHUB_TOKEN')
-        gist_id = clean_env('MY_GIST_ID')
-        url = f"https://api.github.com/gists/{gist_id}"
-        headers = {"Authorization": f"token {token}"}
-        res = requests.get(url, headers=headers)
+        token, gist_id = clean_env('MY_GITHUB_TOKEN'), clean_env('MY_GIST_ID')
+        res = requests.get(
+            f"https://api.github.com/gists/{gist_id}",
+            headers={"Authorization": f"token {token}"}
+        )
         return json.loads(res.json()['files']['stock_data.json']['content'])
 
-    def save_gist_state(self):
+    def save_config(self):
         if os.environ.get('TEST_SKIP_GIST_SAVE', '').lower() in ('1', 'true', 'yes'):
             return
-        token = clean_env('MY_GITHUB_TOKEN')
-        gist_id = clean_env('MY_GIST_ID')
-        url = f"https://api.github.com/gists/{gist_id}"
-        headers = {"Authorization": f"token {token}"}
+        token, gist_id = clean_env('MY_GITHUB_TOKEN'), clean_env('MY_GIST_ID')
         payload = {"files": {"stock_data.json": {"content": json.dumps(self.config, indent=2)}}}
-        requests.patch(url, headers=headers, json=payload)
+        requests.patch(
+            f"https://api.github.com/gists/{gist_id}",
+            headers={"Authorization": f"token {token}"},
+            json=payload
+        )
 
-    def get_market_data(self, ticker):
+    def get_price(self, ticker):
         forced_price = os.environ.get(f'TEST_{ticker}_PRICE')
         forced_ath = os.environ.get(f'TEST_{ticker}_ATH')
         if forced_price:
             close = float(forced_price)
             ath = float(forced_ath) if forced_ath else close
-            return {"ath": ath, "close": close}
+            return ath, close, "test"
         stock = yf.Ticker(ticker)
         df = stock.history(period="max")
-        if df.empty: return {"ath": 0, "close": 0}
-        return {"ath": df['Close'].max(), "close": df['Close'].iloc[-1]}
+        if df.empty:
+            return 0, 0, None
+        return float(df['Close'].max()), float(df['Close'].iloc[-1]), df.index[-1].date().isoformat()
 
     def run(self):
-        self.execute_stock_analysis()
+        messages = []
+        for ticker, etf in [("QQQ", "TQQQ"), ("SOXX", "SOXL")]:
+            msg = self.process(ticker, etf)
+            if msg:
+                messages.append(msg)
         if self.config_updated:
-            self.save_gist_state()
-        self.save_and_send()
+            self.save_config()
+        if messages:
+            self.send_telegram("\n\n".join(messages))
 
-    def execute_stock_analysis(self):
-        tickers = ["QQQ", "SOXX"]
-        for t in tickers:
-            data = self.get_market_data(t)
-            cur_p, ath_now = data['close'], data['ath']
-            t_data = self.config.get(t, {})
+    def process(self, ticker, etf):
+        ath, cur_p, close_date = self.get_price(ticker)
+        if ath <= 0:
+            return None
 
-            current_drop = (cur_p / ath_now - 1) * 100 if ath_now > 0 else 0
-            msg = f"*{t}* (현재: `${cur_p:.2f}` / ATH대비: {current_drop:.1f}%)\n"
+        drop_pct = (cur_p / ath - 1) * 100
+        t = self.config.setdefault(ticker, {})
+        cycle_low = t.get("cycle_low")
 
-            # 무한매수: High_After_End 자동 업데이트 + 알람
-            infi = t_data.get("Infi", {})
-            if cur_p > infi.get("High_After_End", 0):
-                infi["High_After_End"] = cur_p
-                t_data["Infi"] = infi
-                self.config[t] = t_data
+        lines = [f"*{ticker}* (${cur_p:.2f} | ATH ${ath:.2f} | {drop_pct:+.1f}%)"]
+
+        if cycle_low:
+            if cur_p < cycle_low:
+                t["cycle_low"] = cur_p
+                cycle_low = cur_p
                 self.config_updated = True
+            gain_pct = (cur_p / cycle_low - 1) * 100
+            lines.append(f"  저점 ${cycle_low:.2f} → {gain_pct:+.1f}%")
+        else:
+            gain_pct = None
 
-            infi_ref = infi.get("High_After_End", 0)
-            infi_drop = (cur_p / infi_ref - 1) * 100 if infi_ref > 0 else 0
-            limit = -3 if t == "QQQ" else -4
-            alert_limit = limit + 1.0
-            if infi_drop <= limit:
-                msg += f"🔴 [무매-즉시] 타겟 도달! (현재 {infi_drop:.1f}% / 목표 {limit:.1f}% / 알람 {alert_limit:.1f}%)\n"
-            elif infi_drop <= alert_limit:
-                msg += f"🟡 [무매-준비] 근접! (현재 {infi_drop:.1f}% / 목표 {limit:.1f}% / 알람 {alert_limit:.1f}%)\n"
+        alerts = []
+        if ticker == "QQQ":
+            self.qqq_buy_alerts(drop_pct, alerts)
+            if gain_pct is not None:
+                self.qqq_sell_alerts(ath, cur_p, drop_pct, gain_pct, t, alerts, close_date)
+        else:
+            self.soxx_buy_alerts(drop_pct, alerts)
+            if gain_pct is not None:
+                self.soxx_sell_alerts(ath, cur_p, drop_pct, gain_pct, t, alerts, close_date)
 
-            # 사이클 전략
-            for c_key in ["New", "Old"]:
-                cycle = t_data.get(c_key, {})
-                status = cycle.get("Status", "READY")
+        return "\n".join(lines + alerts)
 
-                if status == "PAUSED":
-                    continue
+    # ── QQQ 매수 ───────────────────────────────────────────────────────────────
 
-                if status == "ACTIVE":  # 매도 감시
-                    frozen_ath = cycle.get("Target_ATH", 0)
-                    if frozen_ath <= 0:
-                        continue
-                    r1 = 1.2 if t == "QQQ" else 1.3
-                    target_gain = (r1 - 1) * 100
-                    alert_gain = ((r1 * 0.95) - 1) * 100
-                    current_gain = (cur_p / frozen_ath - 1) * 100
-                    dist_r1 = (frozen_ath * r1 / cur_p - 1) * 100
-                    if cur_p >= frozen_ath * r1 * 0.95:
-                        msg += f"💰 [{c_key}-매도] 목표가까지 {dist_r1:+.1f}% 남음 (현재 {current_gain:+.1f}% / 목표 +{target_gain:.1f}% / 알람 +{alert_gain:.1f}%)\n"
+    def qqq_buy_alerts(self, drop_pct, alerts):
+        buy_levels = [(-19, "1차 30%"), (-20, "2차 40%"), (-21, "3차 30%")]
+        reached = [(thr, lbl) for thr, lbl in buy_levels if drop_pct <= thr]
+        if reached:
+            labels = " + ".join(lbl for _, lbl in reached)
+            alerts.append(f"🚨 [QQQ→TQQQ] 매수 타점 도달: {labels} (현재 {drop_pct:+.1f}%)")
+        elif drop_pct <= -14:
+            alerts.append(f"⚠️ [QQQ] 매수 타점 근접 (현재 {drop_pct:+.1f}% / 1차 기준 -19%)")
 
-                else:  # READY — 진입 감시
-                    drop = (cur_p / ath_now - 1) * 100
-                    targets = (
-                        {-19: "T사이클", -20: "T퇴연", -21: "T사이클", -30: "T하드"}
-                        if t == "QQQ" else
-                        {-20: "S사이클", -22: "S퇴연", -25: "S사이클", -35: "S하드", -40: "S하드"}
-                    )
-                    for pct, name in targets.items():
-                        alert_drop = pct + 5.0
-                        if drop <= pct:
-                            msg += f"🚨 [{c_key}-매수] {name} 도달! (현재 {drop:.1f}% / 목표 {pct:.1f}% / 알람 {alert_drop:.1f}%)\n"
-                            break
-                        elif drop <= alert_drop:
-                            msg += f"⚠️ [{c_key}-준비] {name} 근접! (현재 {drop:.1f}% / 목표 {pct:.1f}% / 알람 {alert_drop:.1f}%)\n"
-                            break
+        if drop_pct <= -30:
+            alerts.append(f"💀 [QQQ] 하드 사이클 진입 조건 도달 (현재 {drop_pct:+.1f}%)")
+        elif drop_pct <= -25:
+            alerts.append(f"⚠️ [QQQ] 하드 사이클 근접 (현재 {drop_pct:+.1f}% / 기준 -30%)")
 
-            self.report.append(msg)
+    # ── SOXX 매수 ──────────────────────────────────────────────────────────────
 
-    def save_and_send(self):
-        if not self.report: return
-        token = clean_env('MY_TELEGRAM_TOKEN')
-        chat_id = clean_env('MY_CHAT_ID')
-        message = '\n\n'.join(self.report)
+    def soxx_buy_alerts(self, drop_pct, alerts):
+        buy_levels = [(-20, "1차 10%"), (-22, "2차 10%"), (-25, "3차 80%")]
+        reached = [(thr, lbl) for thr, lbl in buy_levels if drop_pct <= thr]
+        if reached:
+            labels = " + ".join(lbl for _, lbl in reached)
+            alerts.append(f"🚨 [SOXX→SOXL] 매수 타점 도달: {labels} (현재 {drop_pct:+.1f}%)")
+        elif drop_pct <= -15:
+            alerts.append(f"⚠️ [SOXX] 매수 타점 근접 (현재 {drop_pct:+.1f}% / 1차 기준 -20%)")
+
+        if drop_pct <= -40:
+            alerts.append(f"💀 [SOXX] 하드 2단계 진입 조건 도달 (현재 {drop_pct:+.1f}%)")
+        elif drop_pct <= -35:
+            alerts.append(f"💀 [SOXX] 하드 1단계 진입 / 하드 2단계 근접 (현재 {drop_pct:+.1f}%)")
+        elif drop_pct <= -30:
+            alerts.append(f"⚠️ [SOXX] 하드 1단계 근접 (현재 {drop_pct:+.1f}% / 기준 -35%)")
+
+    # ── QQQ 매도 ───────────────────────────────────────────────────────────────
+
+    def qqq_sell_alerts(self, ath, cur_p, drop_pct, gain_pct, t, alerts, close_date):
+        UNLOCK = 120
+        unlocked = t.get("sell_unlocked", False)
+
+        if not unlocked:
+            if gain_pct >= UNLOCK:
+                t["sell_unlocked"] = True
+                self.config_updated = True
+                alerts.append(f"✅ [QQQ] 매도 감시 시작 (저점 대비 {gain_pct:+.1f}%)")
+                unlocked = True
+            elif gain_pct >= UNLOCK - 5:
+                alerts.append(f"🔔 [QQQ] 매도 조건 근접 (저점 대비 {gain_pct:+.1f}% / 기준 +{UNLOCK}%)")
+
+        if not unlocked:
+            return
+
+        done_1st = t.get("sell_1st_done", False)
+        if not done_1st:
+            if drop_pct <= -5:
+                t["sell_1st_done"] = True
+                t["sell_2nd_ath"] = ath
+                t["sell_2nd_count"] = 0
+                t["sell_2nd_last_date"] = None
+                self.config_updated = True
+                alerts.append(f"💰 [QQQ→TQQQ] 1차 매도! ATH -5% (현재 {drop_pct:+.1f}%) → 50% 매도")
+            return
+
+        # 2차 매도: 동일 ATH 상태에서 -10% 2회
+        ref_ath = t.get("sell_2nd_ath", ath)
+        count = t.get("sell_2nd_count", 0)
+        last_date = t.get("sell_2nd_last_date")
+
+        if count >= 2:
+            alerts.append(f"💰 [QQQ→TQQQ] 2차 매도 조건 달성 → 잔여 전량 매도")
+            return
+
+        if ath > ref_ath:
+            ref_ath = ath
+            count = 0
+            last_date = None
+            t["sell_2nd_ath"] = ref_ath
+            t["sell_2nd_count"] = 0
+            t["sell_2nd_last_date"] = None
+            self.config_updated = True
+
+        drop_from_ref = (cur_p / ref_ath - 1) * 100
+        if drop_from_ref <= -10 and close_date != last_date:
+            count += 1
+            t["sell_2nd_count"] = count
+            t["sell_2nd_last_date"] = close_date
+            self.config_updated = True
+
+        if count >= 2:
+            alerts.append(f"💰 [QQQ→TQQQ] 2차 매도! 동일 ATH -10% 2회 → 잔여 전량 매도")
+        elif drop_from_ref <= -10:
+            alerts.append(f"⚠️ [QQQ] 2차 매도 카운트 {count}/2 (ATH ${ref_ath:.2f} 대비 {drop_from_ref:+.1f}%)")
+
+    # ── SOXX 매도 ──────────────────────────────────────────────────────────────
+
+    def soxx_sell_alerts(self, ath, cur_p, drop_pct, gain_pct, t, alerts, close_date):
+        UNLOCK = 80
+        unlocked = t.get("sell_unlocked", False)
+
+        if not unlocked:
+            if gain_pct >= UNLOCK:
+                t["sell_unlocked"] = True
+                self.config_updated = True
+                alerts.append(f"✅ [SOXX] 매도 감시 시작 (저점 대비 {gain_pct:+.1f}%)")
+                unlocked = True
+            elif gain_pct >= UNLOCK - 5:
+                alerts.append(f"🔔 [SOXX] 매도 조건 근접 (저점 대비 {gain_pct:+.1f}% / 기준 +{UNLOCK}%)")
+
+        if not unlocked:
+            return
+
+        consec = t.get("soxx_consecutive", 0)
+        last_date = t.get("soxx_last_date")
+
+        if consec >= 5:
+            alerts.append(f"💰 [SOXX→SOXL] 매도 조건 달성 → 전량 매도")
+            return
+
+        if close_date != last_date:
+            consec = consec + 1 if drop_pct <= -10 else 0
+            t["soxx_consecutive"] = consec
+            t["soxx_last_date"] = close_date
+            self.config_updated = True
+
+        if consec >= 5:
+            alerts.append(f"💰 [SOXX→SOXL] 매도! ATH -10% 5거래일 연속 → 전량 매도")
+        elif consec >= 3:
+            alerts.append(f"⚠️ [SOXX] 매도 카운트 {consec}/5 ({5 - consec}거래일 남음, ATH 대비 {drop_pct:+.1f}%)")
+        elif consec > 0:
+            alerts.append(f"[SOXX] ATH -10% {consec}거래일 연속 (ATH 대비 {drop_pct:+.1f}%)")
+
+    # ── Telegram ───────────────────────────────────────────────────────────────
+
+    def send_telegram(self, text):
+        token, chat_id = clean_env('MY_TELEGRAM_TOKEN'), clean_env('MY_CHAT_ID')
         if os.environ.get('TEST_MODE', '').lower() in ('1', 'true', 'yes'):
-            message = "[TEST MODE]\n" + message
-        payload = {"chat_id": chat_id, "text": message, "parse_mode": "Markdown"}
+            text = "[TEST MODE]\n" + text
+        payload = {"chat_id": chat_id, "text": text, "parse_mode": "Markdown"}
         res = requests.post(f"https://api.telegram.org/bot{token}/sendMessage", data=payload)
         if os.environ.get('TEST_MODE', '').lower() in ('1', 'true', 'yes'):
             print(f"Telegram status: {res.status_code}")
@@ -133,5 +236,6 @@ class VisualAlarmEngine:
                 print(f"Telegram body: {res.text}")
         res.raise_for_status()
 
+
 if __name__ == "__main__":
-    VisualAlarmEngine().run()
+    StockAlarm().run()
