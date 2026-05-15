@@ -65,7 +65,18 @@ class StockAlarm:
         t = self.config.setdefault(ticker, {})
         cycle_low = t.get("cycle_low")
 
+        # 무매 HAE 자동 갱신
+        infi_hae = t.get("infi_hae", 0)
+        if cur_p > infi_hae:
+            t["infi_hae"] = cur_p
+            infi_hae = cur_p
+            self.config_updated = True
+
         lines = [f"*{ticker}* (${cur_p:.2f} | ATH ${ath:.2f} | {drop_pct:+.1f}%)"]
+
+        if infi_hae > 0:
+            infi_drop = (cur_p / infi_hae - 1) * 100
+            lines.append(f"  무매 ${infi_hae:.2f} ({infi_drop:+.1f}%)")
 
         if cycle_low:
             if cur_p < cycle_low:
@@ -78,6 +89,7 @@ class StockAlarm:
             gain_pct = None
 
         alerts = []
+        self.infi_alerts(ticker, cur_p, infi_hae, alerts)
         if ticker == "QQQ":
             self.qqq_buy_alerts(drop_pct, alerts)
             if gain_pct is not None:
@@ -88,6 +100,19 @@ class StockAlarm:
                 self.soxx_sell_alerts(ath, cur_p, drop_pct, gain_pct, t, alerts, close_date)
 
         return "\n".join(lines + alerts)
+
+    # ── 무한매수 ───────────────────────────────────────────────────────────────
+
+    def infi_alerts(self, ticker, cur_p, infi_hae, alerts):
+        if infi_hae <= 0:
+            return
+        infi_drop = (cur_p / infi_hae - 1) * 100
+        limit = -3.0 if ticker == "QQQ" else -4.0
+        alert_limit = limit + 1.0
+        if infi_drop <= limit:
+            alerts.append(f"🔴 [{ticker}] 무매 즉시매수! (현재 {infi_drop:.1f}% / 기준 {limit:.0f}%)")
+        elif infi_drop <= alert_limit:
+            alerts.append(f"🟡 [{ticker}] 무매 근접! (현재 {infi_drop:.1f}% / 기준 {limit:.0f}%)")
 
     # ── QQQ 매수 ───────────────────────────────────────────────────────────────
 
