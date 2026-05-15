@@ -194,6 +194,17 @@
       }
     }
 
+    function getInfiStatus(ticker, data, cp) {
+      const hae = data?.infi_hae || 0;
+      if (hae <= 0) return { label: '⏸ HAE 없음', cls: 'text-slate-600', sub: 'HAE 입력 후 활성화' };
+      const drop = (cp / hae - 1) * 100;
+      const limit = ticker === 'QQQ' ? -3 : -4;
+      const near  = limit + 1;
+      if (drop <= limit) return { label: '🔴 즉시매수!', cls: 'text-red-400 font-bold',   sub: `HAE $${hae.toFixed(2)} / 현재 ${drop.toFixed(1)}% / 기준 ${limit}%` };
+      if (drop <= near)  return { label: '🟡 근접',      cls: 'text-yellow-400',           sub: `HAE $${hae.toFixed(2)} / 현재 ${drop.toFixed(1)}% / 기준 ${limit}%` };
+      return               { label: '✅ 대기',           cls: 'text-slate-500',            sub: `HAE $${hae.toFixed(2)} / 현재 ${drop.toFixed(1)}% / 기준 ${limit}%` };
+    }
+
     function getSellStatus(ticker, data, drop, gain) {
       const unlock = ticker === 'QQQ' ? 120 : 80;
       if (gain === null) return { label: '⏸ 사이클 없음', cls: 'text-slate-600', sub: '사이클 시작 후 활성화' };
@@ -268,6 +279,7 @@
 
           <!-- 상태 행 -->
           <div class="space-y-2">
+            ${statusRow('무매', getInfiStatus(ticker, data, cp))}
             ${statusRow('매수', buyS)}
             ${statusRow('하드', hardS)}
             ${statusRow('매도', sellS)}
@@ -278,7 +290,21 @@
                   class="w-full mt-4 pt-3 border-t border-slate-700/50 text-[11px] text-slate-500 flex justify-between">
             <span>CYCLE SETTINGS</span><span>▼</span>
           </button>
-          <div id="edit-${ticker}" class="hidden pt-3">
+          <div id="edit-${ticker}" class="hidden pt-3 space-y-2">
+            <!-- 무매 HAE -->
+            <div class="bg-slate-900/50 p-3 rounded-xl space-y-2">
+              <label class="text-[10px] text-slate-400 block">무매 HAE (매도 후 재설정)</label>
+              <div class="flex gap-2">
+                <input id="${ticker}-hae" type="number" step="0.01"
+                       placeholder="0.00" value="${data?.infi_hae || ''}"
+                       class="flex-1 bg-slate-800 rounded-lg px-3 py-2 text-sm outline-none border border-slate-700 focus:border-yellow-500">
+                <button onclick="saveHae('${ticker}')"
+                        class="px-4 py-2 bg-yellow-600 hover:bg-yellow-500 rounded-lg text-sm font-bold transition-all active:scale-95">
+                  저장
+                </button>
+              </div>
+            </div>
+            <!-- 사이클 저점 -->
             <div class="bg-slate-900/50 p-3 rounded-xl space-y-2">
               <label class="text-[10px] text-slate-400 block">사이클 저점 입력</label>
               <input id="${ticker}-cycle-low" type="number" step="0.01"
@@ -314,6 +340,17 @@
     function renderAll() { renderCard('QQQ'); renderCard('SOXX'); }
 
     // ── 사이클 관리 ────────────────────────────────────────────────
+
+    async function saveHae(ticker) {
+      const val = parseFloat(document.getElementById(`${ticker}-hae`).value);
+      if (!val || val <= 0) { alert('HAE 가격을 입력해주세요'); return; }
+      if (!stockData) stockData = {};
+      if (!stockData[ticker]) stockData[ticker] = {};
+      stockData[ticker].infi_hae = val;
+      const ok = await saveToGist();
+      renderAll();
+      setStatus(ok ? `✅ ${ticker} HAE 저장 · ${now()}` : `❌ 저장 실패`);
+    }
 
     async function startCycle(ticker) {
       const val = parseFloat(document.getElementById(`${ticker}-cycle-low`).value);
