@@ -227,9 +227,15 @@
         return         { label: `👁 2차 매도 감시 ${cnt}/2`, cls: 'text-green-400',             sub: `ATH 대비 ${drop.toFixed(1)}%` };
       } else {
         const consec = data?.soxx_consecutive || 0;
-        if (consec >= 5) return { label: '💰 매도!',                    cls: 'text-orange-400 font-bold', sub: 'ATH -10% 5거래일 연속 → 전량 매도' };
-        if (consec >= 3) return { label: `⚠️ 매도 카운트 ${consec}/5`, cls: 'text-yellow-400',            sub: `${5 - consec}거래일 남음 / ATH 대비 ${drop.toFixed(1)}%` };
-        if (consec > 0)  return { label: `👁 감시 중 ${consec}/5`,      cls: 'text-green-400',             sub: `ATH 대비 ${drop.toFixed(1)}%` };
+        const pipColor = consec >= 5 ? '#f97316' : consec >= 3 ? '#facc15' : '#4ade80';
+        const pips = consec > 0
+          ? Array.from({length: 5}, (_, i) =>
+              `<span style="font-size:14px;line-height:1;color:${i < consec ? pipColor : '#475569'}">●</span>`
+            ).join('')
+          : '';
+        if (consec >= 5) return { label: '💰 매도!',                    cls: 'text-orange-400 font-bold', sub: 'ATH -10% 5거래일 연속 → 전량 매도', pips };
+        if (consec >= 3) return { label: `⚠️ ${consec}/5일`,           cls: 'text-yellow-400 font-bold', sub: `${5 - consec}거래일 남음 / ATH 대비 ${drop.toFixed(1)}%`, pips };
+        if (consec > 0)  return { label: `👁 ${consec}/5일`,            cls: 'text-green-400',            sub: `ATH 대비 ${drop.toFixed(1)}%`, pips };
         return             { label: '👁 감시 중',                      cls: 'text-green-400',             sub: `ATH 대비 ${drop.toFixed(1)}% / 기준 -10% × 5일` };
       }
     }
@@ -333,7 +339,10 @@
           <div class="text-[11px] text-slate-400">${name}</div>
           <div class="text-[10px] text-slate-500 mt-0.5">${s.sub}</div>
         </div>
-        <div class="${s.cls} text-sm text-right">${s.label}</div>
+        <div class="text-right">
+          ${s.pips ? `<div class="flex justify-end gap-0.5 mb-1">${s.pips}</div>` : ''}
+          <div class="${s.cls} text-sm">${s.label}</div>
+        </div>
       </div>`;
     }
 
