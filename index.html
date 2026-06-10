@@ -58,7 +58,7 @@
 
   <script>
     let stockData = null;
-    let prices = { QQQ: { current: 0, ath: 0 }, SOXX: { current: 0, ath: 0 } };
+    let prices = { QQQ: { current: 0, ath: 0, closeDate: null }, SOXX: { current: 0, ath: 0, closeDate: null } };
 
     const getConfig = () => ({
       gistId: localStorage.getItem('gist_id') || '',
@@ -116,7 +116,10 @@
         const current = res?.meta?.regularMarketPrice;
         const closes  = res?.indicators?.quote?.[0]?.close?.filter(c => c != null) || [];
         const ath = closes.length ? Math.max(...closes) : 0;
-        return { current, ath: Math.max(ath, current) };
+        const timestamps = res?.timestamp || [];
+        const lastTs = timestamps.length ? timestamps[timestamps.length - 1] : null;
+        const closeDate = lastTs ? new Date(lastTs * 1000).toISOString().split('T')[0] : null;
+        return { current, ath: Math.max(ath, current), closeDate };
       } catch { return null; }
     }
 
@@ -128,7 +131,7 @@
           const res = await fetch(`https://finnhub.io/api/v1/quote?symbol=${ticker}&token=${key}`, { cache: 'no-store' });
           const q = await res.json();
           const current = q.c > 0 ? q.c : q.pc;
-          if (current) return { current, ath: Math.max(yahoo?.ath || 0, current) };
+          if (current) return { current, ath: Math.max(yahoo?.ath || 0, current), closeDate: yahoo?.closeDate || null };
         } catch {}
       }
       return yahoo;
@@ -245,8 +248,8 @@
     function renderCard(ticker) {
       const etf  = ticker === 'QQQ' ? 'TQQQ' : 'SOXL';
       const cp   = prices[ticker].current;
-      const ath  = prices[ticker].ath;
       const data = stockData?.[ticker] || {};
+      const ath  = (ticker === 'SOXX' && data?.sell_ath > 0) ? data.sell_ath : prices[ticker].ath;
       const drop = ath > 0 ? (cp / ath - 1) * 100 : 0;
       const dropCls = drop <= -15 ? 'text-red-400' : drop <= -5 ? 'text-yellow-400' : 'text-green-400';
 
@@ -346,6 +349,28 @@
       </div>`;
     }
 
+    async function updateSoxxCount() {
+      if (!stockData?.SOXX) return;
+      const t = stockData.SOXX;
+      if (!t.sell_unlocked) return;
+
+      const closeDate = prices.SOXX.closeDate;
+      if (!closeDate || closeDate === t.soxx_last_date) return; // 이미 처리된 거래일
+
+      const sellAth = t.sell_ath || prices.SOXX.ath;
+      if (sellAth <= 0) return;
+
+      const drop = (prices.SOXX.current / sellAth - 1) * 100;
+      const prevConsec = t.soxx_consecutive || 0;
+      const newConsec = drop <= -10 ? prevConsec + 1 : 0;
+
+      t.soxx_consecutive = newConsec;
+      t.soxx_last_date = closeDate;
+
+      const ok = await saveToGist();
+      if (ok) setStatus(`📊 SOXX 카운트 업데이트 ${newConsec}/5 · ${now()}`);
+    }
+
     function renderAll() { renderCard('QQQ'); renderCard('SOXX'); }
 
     // ── 사이클 관리 ────────────────────────────────────────────────
@@ -365,7 +390,10 @@
       const val = parseFloat(document.getElementById(`${ticker}-cycle-low`).value);
       if (!val || val <= 0) { alert('저점 가격을 입력해주세요'); return; }
       if (!stockData) stockData = {};
+      const prev = stockData[ticker] || {};
       stockData[ticker] = {
+        infi_hae:          prev.infi_hae || null,
+        sell_ath:          prev.sell_ath || null,
         cycle_low:         val,
         sell_unlocked:     false,
         sell_1st_done:     false,
@@ -398,6 +426,7 @@
       const [q, s] = await Promise.all([fetchPrice('QQQ'), fetchPrice('SOXX')]);
       if (q) prices.QQQ = q;
       if (s) prices.SOXX = s;
+      await updateSoxxCount();
       renderAll();
       setStatus('✅ 업데이트 완료 · ' + now());
     }
