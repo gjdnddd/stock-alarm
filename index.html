@@ -25,12 +25,12 @@
       </div>
     </div>
 
-    <p id="status-msg" class="text-[11px] text-slate-500 mb-4 h-4 flex items-center gap-1"></p>
+    <p id="status-msg" class="text-[11px] text-slate-300 mb-4 h-4 flex items-center gap-1"></p>
 
     <!-- 설정 패널 -->
     <div id="settings-panel" class="hidden mb-6 bg-slate-800 rounded-2xl p-5 shadow-2xl border border-slate-700/50">
       <div class="space-y-2">
-        <h2 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">API & Gist 설정</h2>
+        <h2 class="text-xs font-bold text-slate-300 uppercase tracking-wider mb-3">API & Gist 설정</h2>
         <input id="inp-gist-id" type="text" placeholder="Gist ID"
                class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500">
         <input id="inp-token" type="password" placeholder="GitHub Token"
@@ -177,7 +177,7 @@
         }
       }
       const range = ticker === 'QQQ' ? '-19~21%' : '-20~25%';
-      return { label: '✅ 대기', cls: 'text-slate-500', sub: `현재 ${drop.toFixed(1)}% / 기준 ${range}` };
+      return { label: '✅ 대기', cls: 'text-slate-300', sub: `현재 ${drop.toFixed(1)}% / 기준 ${range}` };
     }
 
     function getHardStatus(ticker, drop) {
@@ -188,18 +188,18 @@
         }
       }
       const range = ticker === 'QQQ' ? '-30%' : '-35~40%';
-      return { label: '✅ 대기', cls: 'text-slate-500', sub: `현재 ${drop.toFixed(1)}% / 기준 ${range}` };
+      return { label: '✅ 대기', cls: 'text-slate-300', sub: `현재 ${drop.toFixed(1)}% / 기준 ${range}` };
     }
 
     function getInfiStatus(ticker, data, cp) {
       const hae = data?.infi_hae || 0;
-      if (hae <= 0) return { label: '⏸ HAE 없음', cls: 'text-slate-600', sub: 'HAE 입력 후 활성화' };
+      if (hae <= 0) return { label: '⏸ HAE 없음', cls: 'text-slate-300', sub: 'HAE 입력 후 활성화' };
       const drop  = (cp / hae - 1) * 100;
       const limit = STRATEGY[ticker].infiLimit;
       const near  = limit + 1;
       if (drop <= limit) return { label: '🔴 즉시매수!', cls: 'text-red-400 font-bold', sub: `HAE $${hae.toFixed(2)} / 현재 ${drop.toFixed(1)}% / 기준 ${limit}%` };
       if (drop <= near)  return { label: '🟡 근접',      cls: 'text-yellow-400',         sub: `HAE $${hae.toFixed(2)} / 현재 ${drop.toFixed(1)}% / 기준 ${limit}%` };
-      return               { label: '✅ 대기',           cls: 'text-slate-500',           sub: `HAE $${hae.toFixed(2)} / 현재 ${drop.toFixed(1)}% / 기준 ${limit}%` };
+      return               { label: '✅ 대기',           cls: 'text-slate-300',           sub: `HAE $${hae.toFixed(2)} / 현재 ${drop.toFixed(1)}% / 기준 ${limit}%` };
     }
 
     function makePips(consec, max, color) {
@@ -210,13 +210,13 @@
 
     function getSellStatus(ticker, data, drop, gain) {
       const unlock = STRATEGY[ticker].sellUnlock;
-      if (gain === null) return { label: '⏸ 사이클 없음', cls: 'text-slate-600', sub: '사이클 시작 후 활성화' };
+      if (gain === null) return { label: '⏸ 사이클 없음', cls: 'text-slate-300', sub: '사이클 시작 후 활성화' };
 
       const unlocked = data?.sell_unlocked || gain >= unlock;
       if (!unlocked) {
         if (gain >= unlock - 5)
           return { label: '🔔 잠금 해제 근접', cls: 'text-blue-400', sub: `저점 대비 +${gain.toFixed(1)}% / 기준 +${unlock}%` };
-        return   { label: '🔒 감시 비활성',   cls: 'text-slate-500', sub: `저점 대비 +${gain.toFixed(1)}% / 기준 +${unlock}%` };
+        return   { label: '🔒 감시 비활성',   cls: 'text-slate-300', sub: `저점 대비 +${gain.toFixed(1)}% / 기준 +${unlock}%` };
       }
 
       if (ticker === 'QQQ') {
@@ -279,8 +279,8 @@
     function statusRow(name, s) {
       return `<div class="flex items-center justify-between bg-slate-700/20 p-3 rounded-xl border border-white/5">
         <div>
-          <div class="text-[11px] text-slate-400">${name}</div>
-          <div class="text-[10px] text-slate-500 mt-0.5">${s.sub}</div>
+          <div class="text-[11px] text-slate-300">${name}</div>
+          <div class="text-[10px] text-slate-300 mt-0.5">${s.sub}</div>
         </div>
         <div class="text-right">
           ${s.pips ? `<div class="flex justify-end gap-0.5 mb-1">${s.pips}</div>` : ''}
@@ -309,12 +309,12 @@
           <div class="flex justify-between items-end mb-2">
             <div>
               <h3 class="text-xl font-black tracking-tight">
-                ${ticker} <span class="text-sm font-normal text-slate-400">→ ${etf}</span>
+                ${ticker} <span class="text-sm font-normal text-slate-300">→ ${etf}</span>
               </h3>
             </div>
             <div class="text-right">
               <div class="text-2xl font-black ${dropCls}">${drop.toFixed(1)}%</div>
-              <div class="text-[11px] text-slate-400">$${cp.toFixed(2)} / ATH $${ath.toFixed(2)}</div>
+              <div class="text-[11px] text-slate-300">$${cp.toFixed(2)} / ATH $${ath.toFixed(2)}</div>
             </div>
           </div>
 
@@ -323,7 +323,7 @@
             ? `<div class="mb-3 text-[12px] text-slate-300">
                  저점 $${cycleLow.toFixed(2)} → <span class="${gainCls} font-bold">${gainStr}</span>
                </div>`
-            : `<div class="mb-3 text-[11px] text-slate-600">사이클 없음</div>`
+            : `<div class="mb-3 text-[11px] text-slate-300">사이클 없음</div>`
           }
 
           <!-- 상태 행 -->
@@ -336,13 +336,13 @@
 
           <!-- 사이클 설정 토글 -->
           <button onclick="document.getElementById('edit-${ticker}').classList.toggle('hidden')"
-                  class="w-full mt-4 pt-3 border-t border-slate-700/50 text-[11px] text-slate-500 flex justify-between">
+                  class="w-full mt-4 pt-3 border-t border-slate-700/50 text-[11px] text-slate-300 flex justify-between">
             <span>CYCLE SETTINGS</span><span>▼</span>
           </button>
           <div id="edit-${ticker}" class="hidden pt-3 space-y-2">
             <!-- 무매 HAE -->
             <div class="bg-slate-900/50 p-3 rounded-xl space-y-2">
-              <label class="text-[10px] text-slate-400 block">무매 HAE (매도 후 재설정)</label>
+              <label class="text-[10px] text-slate-300 block">무매 HAE (매도 후 재설정)</label>
               <div class="flex gap-2">
                 <input id="${ticker}-hae" type="number" step="0.01"
                        placeholder="0.00" value="${data?.infi_hae || ''}"
@@ -355,7 +355,7 @@
             </div>
             <!-- 사이클 저점 -->
             <div class="bg-slate-900/50 p-3 rounded-xl space-y-2">
-              <label class="text-[10px] text-slate-400 block">사이클 저점 입력</label>
+              <label class="text-[10px] text-slate-300 block">사이클 저점 입력</label>
               <input id="${ticker}-cycle-low" type="number" step="0.01"
                      placeholder="0.00" value="${cycleLow || ''}"
                      class="w-full bg-slate-800 rounded-lg px-3 py-2 text-sm outline-none border border-slate-700 focus:border-emerald-500">
@@ -369,7 +369,7 @@
                   ⏹ 사이클 종료
                 </button>
               </div>
-              ${cycleLow ? `<p class="text-[10px] text-slate-500">현재 저점: $${cycleLow.toFixed(2)} · 종료 후 재시작하면 상태 초기화</p>` : ''}
+              ${cycleLow ? `<p class="text-[10px] text-slate-300">현재 저점: $${cycleLow.toFixed(2)} · 종료 후 재시작하면 상태 초기화</p>` : ''}
             </div>
           </div>
 
