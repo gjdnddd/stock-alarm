@@ -315,6 +315,7 @@
             <div class="text-right">
               <div class="text-2xl font-black ${dropCls}">${drop.toFixed(1)}%</div>
               <div class="text-[11px] text-slate-300">$${cp.toFixed(2)} / ATH $${ath.toFixed(2)}</div>
+              <div class="text-[10px] text-slate-300">${data?.ath_updated_at ? `ATH 갱신 ${data.ath_updated_at}` : 'ATH 갱신일 없음'}</div>
             </div>
           </div>
 
@@ -472,12 +473,33 @@
       }());
     }
 
+    async function updateSellAth() {
+      if (!stockData) return false;
+      let changed = false;
+      const today = new Date().toISOString().split('T')[0];
+      for (const ticker of ['QQQ', 'SOXX']) {
+        const cp = prices[ticker].current;
+        if (!cp || cp <= 0) continue;
+        const t = stockData[ticker];
+        if (!t) continue;
+        const sellAth = t.sell_ath || 0;
+        if (cp > sellAth) {
+          t.sell_ath = cp;
+          t.ath_updated_at = today;
+          changed = true;
+        }
+      }
+      if (changed) await saveToGist();
+      return changed;
+    }
+
     async function refreshAll() {
       setStatus('데이터 동기화 중...');
       await fetchGistData();
       const [q, s] = await Promise.all([fetchPrice('QQQ'), fetchPrice('SOXX')]);
       if (q) prices.QQQ = q;
       if (s) prices.SOXX = s;
+      await updateSellAth();
       const updatedConsec = await updateSoxxCount();
       renderAll();
       setStatus(updatedConsec !== null
