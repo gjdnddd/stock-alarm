@@ -91,11 +91,11 @@ class StockAlarm:
         alerts = []
         self.infi_alerts(ticker, cur_p, infi_hae, alerts)
         if ticker == "QQQ":
-            self.qqq_buy_alerts(drop_pct, alerts)
+            self.qqq_buy_alerts(ath, drop_pct, alerts)
             if gain_pct is not None:
                 self.qqq_sell_alerts(ath, cur_p, drop_pct, gain_pct, t, alerts, close_date)
         else:
-            self.soxx_buy_alerts(drop_pct, alerts)
+            self.soxx_buy_alerts(ath, drop_pct, alerts)
             if gain_pct is not None:
                 self.soxx_sell_alerts(ath, cur_p, drop_pct, gain_pct, t, alerts, close_date)
 
@@ -110,58 +110,61 @@ class StockAlarm:
         limit = -3.0 if ticker == "QQQ" else -4.0
         alert_limit = limit + 1.0
         if infi_drop <= limit:
-            alerts.append(f"🔴 [{ticker}] 무매 즉시매수! (현재 {infi_drop:.1f}% / 기준 {limit:.0f}%)")
+            alerts.append(f"🔴 [{ticker}] 무매 즉시매수! (현재 {infi_drop:.1f}% / 기준 {limit:.0f}%(${infi_hae * (1 + limit / 100):.2f}))")
         elif infi_drop <= alert_limit:
-            alerts.append(f"🟡 [{ticker}] 무매 근접! (현재 {infi_drop:.1f}% / 기준 {limit:.0f}%)")
+            alerts.append(f"🟡 [{ticker}] 무매 근접! (현재 {infi_drop:.1f}% / 기준 {alert_limit:.0f}%(${infi_hae * (1 + alert_limit / 100):.2f}))")
 
     # ── QQQ 매수 ───────────────────────────────────────────────────────────────
 
-    def qqq_buy_alerts(self, drop_pct, alerts):
+    def qqq_buy_alerts(self, ath, drop_pct, alerts):
         buy_levels = [(-19, "1차 30%"), (-20, "2차 40%"), (-21, "3차 30%")]
         reached = [(thr, lbl) for thr, lbl in buy_levels if drop_pct <= thr]
         if reached:
             labels = " + ".join(lbl for _, lbl in reached)
-            alerts.append(f"🚨 [QQQ→TQQQ] 매수 타점 도달: {labels} (현재 {drop_pct:+.1f}%)")
+            lo, hi = buy_levels[0][0], buy_levels[-1][0]
+            alerts.append(f"🚨 [QQQ→TQQQ] 매수 타점 도달: {labels} (현재 {drop_pct:+.1f}% / 기준 {lo:.0f}~{hi:.0f}%(${ath * (1 + lo / 100):.2f}~${ath * (1 + hi / 100):.2f}))")
         elif drop_pct <= -14:
-            alerts.append(f"⚠️ [QQQ] 매수 타점 근접 (현재 {drop_pct:+.1f}% / 1차 기준 -19%)")
+            alerts.append(f"⚠️ [QQQ] 매수 타점 근접 (현재 {drop_pct:+.1f}% / 1차 기준 -19%(${ath * 0.81:.2f}))")
 
         if drop_pct <= -30:
-            alerts.append(f"💀 [QQQ] 하드 사이클 진입 조건 도달 (현재 {drop_pct:+.1f}%)")
+            alerts.append(f"💀 [QQQ] 하드 사이클 진입 조건 도달 (현재 {drop_pct:+.1f}% / 기준 -30%(${ath * 0.70:.2f}))")
         elif drop_pct <= -25:
-            alerts.append(f"⚠️ [QQQ] 하드 사이클 근접 (현재 {drop_pct:+.1f}% / 기준 -30%)")
+            alerts.append(f"⚠️ [QQQ] 하드 사이클 근접 (현재 {drop_pct:+.1f}% / 기준 -30%(${ath * 0.70:.2f}))")
 
     # ── SOXX 매수 ──────────────────────────────────────────────────────────────
 
-    def soxx_buy_alerts(self, drop_pct, alerts):
+    def soxx_buy_alerts(self, ath, drop_pct, alerts):
         buy_levels = [(-20, "1차 10%"), (-22, "2차 10%"), (-25, "3차 80%")]
         reached = [(thr, lbl) for thr, lbl in buy_levels if drop_pct <= thr]
         if reached:
             labels = " + ".join(lbl for _, lbl in reached)
-            alerts.append(f"🚨 [SOXX→SOXL] 매수 타점 도달: {labels} (현재 {drop_pct:+.1f}%)")
+            lo, hi = buy_levels[0][0], buy_levels[-1][0]
+            alerts.append(f"🚨 [SOXX→SOXL] 매수 타점 도달: {labels} (현재 {drop_pct:+.1f}% / 기준 {lo:.0f}~{hi:.0f}%(${ath * (1 + lo / 100):.2f}~${ath * (1 + hi / 100):.2f}))")
         elif drop_pct <= -15:
-            alerts.append(f"⚠️ [SOXX] 매수 타점 근접 (현재 {drop_pct:+.1f}% / 1차 기준 -20%)")
+            alerts.append(f"⚠️ [SOXX] 매수 타점 근접 (현재 {drop_pct:+.1f}% / 1차 기준 -20%(${ath * 0.80:.2f}))")
 
         if drop_pct <= -40:
-            alerts.append(f"💀 [SOXX] 하드 2단계 진입 조건 도달 (현재 {drop_pct:+.1f}%)")
+            alerts.append(f"💀 [SOXX] 하드 2단계 진입 조건 도달 (현재 {drop_pct:+.1f}% / 기준 -40%(${ath * 0.60:.2f}))")
         elif drop_pct <= -35:
-            alerts.append(f"💀 [SOXX] 하드 1단계 진입 / 하드 2단계 근접 (현재 {drop_pct:+.1f}%)")
+            alerts.append(f"💀 [SOXX] 하드 1단계 진입 / 하드 2단계 근접 (현재 {drop_pct:+.1f}% / 기준 -40%(${ath * 0.60:.2f}))")
         elif drop_pct <= -30:
-            alerts.append(f"⚠️ [SOXX] 하드 1단계 근접 (현재 {drop_pct:+.1f}% / 기준 -35%)")
+            alerts.append(f"⚠️ [SOXX] 하드 1단계 근접 (현재 {drop_pct:+.1f}% / 기준 -35%(${ath * 0.65:.2f}))")
 
     # ── QQQ 매도 ───────────────────────────────────────────────────────────────
 
     def qqq_sell_alerts(self, ath, cur_p, drop_pct, gain_pct, t, alerts, close_date):
         UNLOCK = 120
         unlocked = t.get("sell_unlocked", False)
+        cycle_low = cur_p / (1 + gain_pct / 100)
 
         if not unlocked:
             if gain_pct >= UNLOCK:
                 t["sell_unlocked"] = True
                 self.config_updated = True
-                alerts.append(f"✅ [QQQ] 매도 감시 시작 (저점 대비 {gain_pct:+.1f}%)")
+                alerts.append(f"✅ [QQQ] 매도 감시 시작 (저점 대비 {gain_pct:+.1f}% / 기준 +{UNLOCK}%(${cycle_low * (1 + UNLOCK / 100):.2f}))")
                 unlocked = True
             elif gain_pct >= UNLOCK - 5:
-                alerts.append(f"🔔 [QQQ] 매도 조건 근접 (저점 대비 {gain_pct:+.1f}% / 기준 +{UNLOCK}%)")
+                alerts.append(f"🔔 [QQQ] 매도 조건 근접 (저점 대비 {gain_pct:+.1f}% / 기준 +{UNLOCK}%(${cycle_low * (1 + UNLOCK / 100):.2f}))")
 
         if not unlocked:
             return
@@ -174,7 +177,7 @@ class StockAlarm:
                 t["sell_2nd_count"] = 0
                 t["sell_2nd_last_date"] = None
                 self.config_updated = True
-                alerts.append(f"💰 [QQQ→TQQQ] 1차 매도! ATH -5% (현재 {drop_pct:+.1f}%) → 50% 매도")
+                alerts.append(f"💰 [QQQ→TQQQ] 1차 매도! ATH -5%(${ath * 0.95:.2f}) (현재 {drop_pct:+.1f}%) → 50% 매도")
             return
 
         # 2차 매도: 동일 ATH 상태에서 -10% 2회
@@ -212,15 +215,16 @@ class StockAlarm:
     def soxx_sell_alerts(self, ath, cur_p, drop_pct, gain_pct, t, alerts, close_date):
         UNLOCK = 80
         unlocked = t.get("sell_unlocked", False)
+        cycle_low = cur_p / (1 + gain_pct / 100)
 
         if not unlocked:
             if gain_pct >= UNLOCK:
                 t["sell_unlocked"] = True
                 self.config_updated = True
-                alerts.append(f"✅ [SOXX] 매도 감시 시작 (저점 대비 {gain_pct:+.1f}%)")
+                alerts.append(f"✅ [SOXX] 매도 감시 시작 (저점 대비 {gain_pct:+.1f}% / 기준 +{UNLOCK}%(${cycle_low * (1 + UNLOCK / 100):.2f}))")
                 unlocked = True
             elif gain_pct >= UNLOCK - 5:
-                alerts.append(f"🔔 [SOXX] 매도 조건 근접 (저점 대비 {gain_pct:+.1f}% / 기준 +{UNLOCK}%)")
+                alerts.append(f"🔔 [SOXX] 매도 조건 근접 (저점 대비 {gain_pct:+.1f}% / 기준 +{UNLOCK}%(${cycle_low * (1 + UNLOCK / 100):.2f}))")
 
         if not unlocked:
             return
@@ -239,11 +243,11 @@ class StockAlarm:
             self.config_updated = True
 
         if consec >= 5:
-            alerts.append(f"💰 [SOXX→SOXL] 매도! ATH -10% 5거래일 연속 → 전량 매도")
+            alerts.append(f"💰 [SOXX→SOXL] 매도! ATH -10%(${ath * 0.90:.2f}) 5거래일 연속 → 전량 매도")
         elif consec >= 3:
-            alerts.append(f"⚠️ [SOXX] 매도 카운트 {consec}/5 ({5 - consec}거래일 남음, ATH 대비 {drop_pct:+.1f}%)")
+            alerts.append(f"⚠️ [SOXX] 매도 카운트 {consec}/5 ({5 - consec}거래일 남음, ATH 대비 {drop_pct:+.1f}% / 기준 -10%(${ath * 0.90:.2f}))")
         elif consec > 0:
-            alerts.append(f"[SOXX] ATH -10% {consec}거래일 연속 (ATH 대비 {drop_pct:+.1f}%)")
+            alerts.append(f"[SOXX] ATH -10%(${ath * 0.90:.2f}) {consec}거래일 연속 (ATH 대비 {drop_pct:+.1f}%)")
 
     # ── Telegram ───────────────────────────────────────────────────────────────
 
