@@ -69,6 +69,8 @@
       SOXX: [[-25,'🚨 1+2+3차 도달','-20~25%'],[-22,'🚨 1+2차 도달','-20~25%'],[-20,'🚨 1차 도달','-20~25%'],[-15,'⚠️ 근접','1차 -20%']]
     };
 
+    const BUY_RANGE = { QQQ: [-19, -21], SOXX: [-20, -25] };
+
     const HARD_LEVELS = {
       QQQ:  [[-30,'💀 하드 진입','-30%'],[-25,'⚠️ 하드 근접','-30%']],
       SOXX: [[-40,'💀 하드 2단계 진입','-40%'],[-35,'💀 하드 1단계 진입','-35%'],[-30,'⚠️ 하드 1단계 근접','-35%']]
@@ -168,27 +170,36 @@
 
     // ── 전략 판정 (순수 함수) ──────────────────────────────────────
 
-    function getBuyStatus(ticker, drop) {
+    function getBuyStatus(ticker, drop, ath) {
+      const [lo, hi] = BUY_RANGE[ticker];
+      const rangeAbs = `$${(ath * (1 + lo / 100)).toFixed(2)}~$${(ath * (1 + hi / 100)).toFixed(2)}`;
       for (const [thr, label, range] of BUY_LEVELS[ticker]) {
         if (drop <= thr) {
           const cls = label.startsWith('🚨') ? 'text-red-400 font-bold' : 'text-yellow-400';
-          const sub = label.startsWith('🚨') ? `현재 ${drop.toFixed(1)}% / 기준 ${range}` : `현재 ${drop.toFixed(1)}% / ${range}`;
+          const sub = label.startsWith('🚨')
+            ? `현재 ${drop.toFixed(1)}% / 기준 ${range}(${rangeAbs})`
+            : `현재 ${drop.toFixed(1)}% / ${range}($${(ath * (1 + lo / 100)).toFixed(2)})`;
           return { label, cls, sub };
         }
       }
       const range = ticker === 'QQQ' ? '-19~21%' : '-20~25%';
-      return { label: '✅ 대기', cls: 'text-slate-300', sub: `현재 ${drop.toFixed(1)}% / 기준 ${range}` };
+      return { label: '✅ 대기', cls: 'text-slate-300', sub: `현재 ${drop.toFixed(1)}% / 기준 ${range}(${rangeAbs})` };
     }
 
-    function getHardStatus(ticker, drop) {
+    function getHardStatus(ticker, drop, ath) {
       for (const [thr, label, range] of HARD_LEVELS[ticker]) {
         if (drop <= thr) {
           const cls = label.startsWith('💀') ? 'text-red-400 font-black' : 'text-orange-400';
-          return { label, cls, sub: `현재 ${drop.toFixed(1)}% / 기준 ${range}` };
+          const abs = ath * (1 + parseFloat(range) / 100);
+          return { label, cls, sub: `현재 ${drop.toFixed(1)}% / 기준 ${range}($${abs.toFixed(2)})` };
         }
       }
-      const range = ticker === 'QQQ' ? '-30%' : '-35~40%';
-      return { label: '✅ 대기', cls: 'text-slate-300', sub: `현재 ${drop.toFixed(1)}% / 기준 ${range}` };
+      if (ticker === 'QQQ') {
+        const abs = ath * 0.70;
+        return { label: '✅ 대기', cls: 'text-slate-300', sub: `현재 ${drop.toFixed(1)}% / 기준 -30%($${abs.toFixed(2)})` };
+      }
+      const lo = ath * 0.65, hi = ath * 0.60;
+      return { label: '✅ 대기', cls: 'text-slate-300', sub: `현재 ${drop.toFixed(1)}% / 기준 -35~40%($${lo.toFixed(2)}~$${hi.toFixed(2)})` };
     }
 
     function getInfiStatus(ticker, data, cp) {
@@ -197,9 +208,11 @@
       const drop  = (cp / hae - 1) * 100;
       const limit = STRATEGY[ticker].infiLimit;
       const near  = limit + 1;
-      if (drop <= limit) return { label: '🔴 즉시매수!', cls: 'text-red-400 font-bold', sub: `HAE $${hae.toFixed(2)} / 현재 ${drop.toFixed(1)}% / 기준 ${limit}%` };
-      if (drop <= near)  return { label: '🟡 근접',      cls: 'text-yellow-400',         sub: `HAE $${hae.toFixed(2)} / 현재 ${drop.toFixed(1)}% / 기준 ${limit}%` };
-      return               { label: '✅ 대기',           cls: 'text-slate-300',           sub: `HAE $${hae.toFixed(2)} / 현재 ${drop.toFixed(1)}% / 기준 ${limit}%` };
+      const limitAbs = hae * (1 + limit / 100);
+      const nearAbs  = hae * (1 + near / 100);
+      if (drop <= limit) return { label: '🔴 즉시매수!', cls: 'text-red-400 font-bold', sub: `HAE $${hae.toFixed(2)} / 현재 ${drop.toFixed(1)}% / 기준 ${limit}%($${limitAbs.toFixed(2)})` };
+      if (drop <= near)  return { label: '🟡 근접',      cls: 'text-yellow-400',         sub: `HAE $${hae.toFixed(2)} / 현재 ${drop.toFixed(1)}% / 기준 ${near}%($${nearAbs.toFixed(2)})` };
+      return               { label: '✅ 대기',           cls: 'text-slate-300',           sub: `HAE $${hae.toFixed(2)} / 현재 ${drop.toFixed(1)}% / 기준 ${limit}%($${limitAbs.toFixed(2)})` };
     }
 
     function makePips(consec, max, color) {
@@ -208,40 +221,44 @@
       ).join('');
     }
 
-    function getSellStatus(ticker, data, drop, gain) {
+    function getSellStatus(ticker, data, drop, gain, ath, cycleLow) {
       const unlock = STRATEGY[ticker].sellUnlock;
       if (gain === null) return { label: '⏸ 사이클 없음', cls: 'text-slate-300', sub: '사이클 시작 후 활성화' };
 
+      const unlockAbs = cycleLow ? `($${(cycleLow * (1 + unlock / 100)).toFixed(2)})` : '';
       const unlocked = data?.sell_unlocked || gain >= unlock;
       if (!unlocked) {
         if (gain >= unlock - 5)
-          return { label: '🔔 잠금 해제 근접', cls: 'text-blue-400', sub: `저점 대비 +${gain.toFixed(1)}% / 기준 +${unlock}%` };
-        return   { label: '🔒 감시 비활성',   cls: 'text-slate-300', sub: `저점 대비 +${gain.toFixed(1)}% / 기준 +${unlock}%` };
+          return { label: '🔔 잠금 해제 근접', cls: 'text-blue-400', sub: `저점 대비 +${gain.toFixed(1)}% / 기준 +${unlock}%${unlockAbs}` };
+        return   { label: '🔒 감시 비활성',   cls: 'text-slate-300', sub: `저점 대비 +${gain.toFixed(1)}% / 기준 +${unlock}%${unlockAbs}` };
       }
 
       if (ticker === 'QQQ') {
         const done1 = data?.sell_1st_done;
+        const sell1Abs = (ath * 0.95).toFixed(2);
         if (!done1) {
           if (drop <= STRATEGY.QQQ.sell1stDrop)
-            return { label: '💰 1차 매도!',     cls: 'text-orange-400 font-bold', sub: `ATH 대비 ${drop.toFixed(1)}% → TQQQ 50% 매도` };
-          return   { label: '👁 1차 매도 감시 중', cls: 'text-green-400',           sub: `ATH 대비 ${drop.toFixed(1)}% / 기준 -5%` };
+            return { label: '💰 1차 매도!',     cls: 'text-orange-400 font-bold', sub: `ATH 대비 ${drop.toFixed(1)}% (기준 -5%, $${sell1Abs}) → TQQQ 50% 매도` };
+          return   { label: '👁 1차 매도 감시 중', cls: 'text-green-400',           sub: `ATH 대비 ${drop.toFixed(1)}% / 기준 -5%($${sell1Abs})` };
         }
         const cnt = data?.sell_2nd_count || 0;
+        const refAth = data?.sell_2nd_ath || ath;
         if (cnt >= 2)
           return { label: '💰 2차 매도!',           cls: 'text-orange-400 font-bold', sub: '동일 ATH -10% 2회 → 잔여 전량 매도' };
-        return   { label: `👁 2차 매도 감시 ${cnt}/2`, cls: 'text-green-400',           sub: `ATH 대비 ${drop.toFixed(1)}%` };
+        return   { label: `👁 2차 매도 감시 ${cnt}/2`, cls: 'text-green-400',           sub: `ATH $${refAth.toFixed(2)} 대비 ${drop.toFixed(1)}%` };
       } else {
         const { sellDays } = STRATEGY.SOXX;
         const consec   = data?.soxx_consecutive || 0;
         const pipColor = consec >= sellDays ? '#f97316' : consec >= 3 ? '#facc15' : '#4ade80';
         const pips     = consec > 0 ? makePips(consec, sellDays, pipColor) : '';
+        const hardAbs  = (ath * 0.90).toFixed(2);
         if (consec >= sellDays)
-          return { label: '💰 매도!',          cls: 'text-orange-400 font-bold', sub: 'ATH -10% 5거래일 연속 → 전량 매도', pips };
+          return { label: '💰 매도!',          cls: 'text-orange-400 font-bold', sub: `ATH -10%($${hardAbs}) 5거래일 연속 → 전량 매도`, pips };
         if (consec >= 3)
-          return { label: `⚠️ ${consec}/5일`, cls: 'text-yellow-400 font-bold', sub: `${sellDays - consec}거래일 남음 / ATH 대비 ${drop.toFixed(1)}%`, pips };
+          return { label: `⚠️ ${consec}/5일`, cls: 'text-yellow-400 font-bold', sub: `${sellDays - consec}거래일 남음 / ATH 대비 ${drop.toFixed(1)}% / 기준 -10%($${hardAbs})`, pips };
         if (consec > 0)
-          return { label: `👁 ${consec}/5일`, cls: 'text-green-400',            sub: `ATH 대비 ${drop.toFixed(1)}%`, pips };
-        return   { label: '👁 감시 중',        cls: 'text-green-400',            sub: `ATH 대비 ${drop.toFixed(1)}% / 기준 -10% × 5일` };
+          return { label: `👁 ${consec}/5일`, cls: 'text-green-400',            sub: `ATH 대비 ${drop.toFixed(1)}% / 기준 -10%($${hardAbs})`, pips };
+        return   { label: '👁 감시 중',        cls: 'text-green-400',            sub: `ATH 대비 ${drop.toFixed(1)}% / 기준 -10%($${hardAbs}) × 5일` };
       }
     }
 
@@ -330,9 +347,9 @@
           <!-- 상태 행 -->
           <div class="space-y-2">
             ${statusRow('무매', getInfiStatus(ticker, data, cp))}
-            ${statusRow('매수', getBuyStatus(ticker, drop))}
-            ${statusRow('하드', getHardStatus(ticker, drop))}
-            ${statusRow('매도', getSellStatus(ticker, data, drop, gain))}
+            ${statusRow('매수', getBuyStatus(ticker, drop, ath))}
+            ${statusRow('하드', getHardStatus(ticker, drop, ath))}
+            ${statusRow('매도', getSellStatus(ticker, data, drop, gain, ath, cycleLow))}
           </div>
 
           <!-- 사이클 설정 토글 -->
