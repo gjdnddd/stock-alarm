@@ -1,0 +1,25 @@
+name: Dashboard Prices
+
+on:
+  schedule:
+    - cron: '10 21 * * *'  # 06:10 KST (미장 마감)
+    - cron: '0 7 * * *'    # 16:00 KST (국장 마감)
+  workflow_dispatch:
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install dependencies
+        run: pip install yfinance requests
+      - name: Fetch prices and push to Gist
+        env:
+          MY_GITHUB_TOKEN: ${{ secrets.MY_GITHUB_TOKEN }}
+          MY_GIST_ID: ${{ secrets.MY_GIST_ID }}
+        run: python dashboard_prices.py
