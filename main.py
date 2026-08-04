@@ -117,19 +117,15 @@ class StockAlarm:
     # ── QQQ 매수 ───────────────────────────────────────────────────────────────
 
     def qqq_buy_alerts(self, ath, drop_pct, alerts):
-        buy_levels = [(-19, "1차 30%"), (-20, "2차 40%"), (-21, "3차 30%")]
-        reached = [(thr, lbl) for thr, lbl in buy_levels if drop_pct <= thr]
-        if reached:
-            labels = " + ".join(lbl for _, lbl in reached)
-            lo, hi = buy_levels[0][0], buy_levels[-1][0]
-            alerts.append(f"🚨 [QQQ→TQQQ] 매수 타점 도달: {labels} (현재 {drop_pct:+.1f}% / 기준 {lo:.0f}~{hi:.0f}%(${ath * (1 + lo / 100):.2f}~${ath * (1 + hi / 100):.2f}))")
-        elif drop_pct <= -14:
-            alerts.append(f"⚠️ [QQQ] 매수 타점 근접 (현재 {drop_pct:+.1f}% / 1차 기준 -19%(${ath * 0.81:.2f}))")
+        if drop_pct <= -15:
+            alerts.append(f"🚨 [QQQ→TQQQ] 매수 타점 도달 (현재 {drop_pct:+.1f}% / 기준 -15%(${ath * 0.85:.2f}))")
+        elif drop_pct <= -11:
+            alerts.append(f"⚠️ [QQQ] 매수 타점 근접 (현재 {drop_pct:+.1f}% / 기준 -15%(${ath * 0.85:.2f}))")
 
-        if drop_pct <= -30:
-            alerts.append(f"💀 [QQQ] 하드 사이클 진입 조건 도달 (현재 {drop_pct:+.1f}% / 기준 -30%(${ath * 0.70:.2f}))")
+        if drop_pct <= -35:
+            alerts.append(f"💀 [QQQ] 하드 사이클 진입 조건 도달 (현재 {drop_pct:+.1f}% / 기준 -35%(${ath * 0.65:.2f}))")
         elif drop_pct <= -25:
-            alerts.append(f"⚠️ [QQQ] 하드 사이클 근접 (현재 {drop_pct:+.1f}% / 기준 -30%(${ath * 0.70:.2f}))")
+            alerts.append(f"⚠️ [QQQ] 하드 사이클 근접 (현재 {drop_pct:+.1f}% / 기준 -35%(${ath * 0.65:.2f}))")
 
     # ── SOXX 매수 ──────────────────────────────────────────────────────────────
 
@@ -153,7 +149,7 @@ class StockAlarm:
     # ── QQQ 매도 ───────────────────────────────────────────────────────────────
 
     def qqq_sell_alerts(self, ath, cur_p, drop_pct, gain_pct, t, alerts, close_date):
-        UNLOCK = 120
+        UNLOCK = 90
         unlocked = t.get("sell_unlocked", False)
         cycle_low = cur_p / (1 + gain_pct / 100)
 
@@ -173,42 +169,17 @@ class StockAlarm:
         if not done_1st:
             if drop_pct <= -5:
                 t["sell_1st_done"] = True
-                t["sell_2nd_ath"] = ath
-                t["sell_2nd_count"] = 0
-                t["sell_2nd_last_date"] = None
                 self.config_updated = True
                 alerts.append(f"💰 [QQQ→TQQQ] 1차 매도! ATH -5%(${ath * 0.95:.2f}) (현재 {drop_pct:+.1f}%) → 50% 매도")
             return
 
-        # 2차 매도: 동일 ATH 상태에서 -10% 2회
-        ref_ath = t.get("sell_2nd_ath", ath)
-        count = t.get("sell_2nd_count", 0)
-        last_date = t.get("sell_2nd_last_date")
-
-        if count >= 2:
-            alerts.append(f"💰 [QQQ→TQQQ] 2차 매도 조건 달성 → 잔여 전량 매도")
+        if t.get("sell_2nd_done", False):
             return
 
-        if ath > ref_ath:
-            ref_ath = ath
-            count = 0
-            last_date = None
-            t["sell_2nd_ath"] = ref_ath
-            t["sell_2nd_count"] = 0
-            t["sell_2nd_last_date"] = None
+        if drop_pct <= -10:
+            t["sell_2nd_done"] = True
             self.config_updated = True
-
-        drop_from_ref = (cur_p / ref_ath - 1) * 100
-        if drop_from_ref <= -10 and close_date != last_date:
-            count += 1
-            t["sell_2nd_count"] = count
-            t["sell_2nd_last_date"] = close_date
-            self.config_updated = True
-
-        if count >= 2:
-            alerts.append(f"💰 [QQQ→TQQQ] 2차 매도! 동일 ATH -10% 2회 → 잔여 전량 매도")
-        elif drop_from_ref <= -10:
-            alerts.append(f"⚠️ [QQQ] 2차 매도 카운트 {count}/2 (ATH ${ref_ath:.2f} 대비 {drop_from_ref:+.1f}%)")
+            alerts.append(f"💰 [QQQ→TQQQ] 2차 매도! ATH -10%(${ath * 0.90:.2f}) (현재 {drop_pct:+.1f}%) → 잔여 전량 매도")
 
     # ── SOXX 매도 ──────────────────────────────────────────────────────────────
 

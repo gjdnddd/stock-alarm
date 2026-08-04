@@ -60,19 +60,18 @@
     // ── 상수 ───────────────────────────────────────────────────────
 
     const STRATEGY = {
-      QQQ:  { infiLimit: -3, sellUnlock: 120, sell1stDrop: -5,  sell2ndDrop: -10 },
-      SOXX: { infiLimit: -4, sellUnlock:  80, sellDrop:   -10,  sellDays:      5 }
+      QQQ:  { infiLimit: -3, sellUnlock: 90, sell1stDrop: -5,  sell2ndDrop: -10, buyEnter: -15, buyNear: -11 },
+      SOXX: { infiLimit: -4, sellUnlock: 80, sellDrop:   -10,  sellDays:      5 }
     };
 
     const BUY_LEVELS = {
-      QQQ:  [[-21,'🚨 1+2+3차 도달','-19~21%'],[-20,'🚨 1+2차 도달','-19~21%'],[-19,'🚨 1차 도달','-19~21%'],[-14,'⚠️ 근접','1차 -19%']],
       SOXX: [[-25,'🚨 1+2+3차 도달','-20~25%'],[-22,'🚨 1+2차 도달','-20~25%'],[-20,'🚨 1차 도달','-20~25%'],[-15,'⚠️ 근접','1차 -20%']]
     };
 
-    const BUY_RANGE = { QQQ: [-19, -21], SOXX: [-20, -25] };
+    const BUY_RANGE = { SOXX: [-20, -25] };
 
     const HARD_LEVELS = {
-      QQQ:  [[-30,'💀 하드 진입','-30%'],[-25,'⚠️ 하드 근접','-30%']],
+      QQQ:  [[-35,'💀 하드 진입','-35%'],[-25,'⚠️ 하드 근접','-35%']],
       SOXX: [[-40,'💀 하드 2단계 진입','-40%'],[-35,'💀 하드 1단계 진입','-35%'],[-30,'⚠️ 하드 1단계 근접','-35%']]
     };
 
@@ -171,6 +170,13 @@
     // ── 전략 판정 (순수 함수) ──────────────────────────────────────
 
     function getBuyStatus(ticker, drop, ath) {
+      if (ticker === 'QQQ') {
+        const { buyEnter, buyNear } = STRATEGY.QQQ;
+        const enterAbs = `$${(ath * (1 + buyEnter / 100)).toFixed(2)}`;
+        if (drop <= buyEnter) return { label: '🚨 매수 타점 도달', cls: 'text-red-400 font-bold', sub: `현재 ${drop.toFixed(1)}% / 기준 ${buyEnter}%(${enterAbs})` };
+        if (drop <= buyNear)  return { label: '⚠️ 근접',          cls: 'text-yellow-400',         sub: `현재 ${drop.toFixed(1)}% / 기준 ${buyEnter}%(${enterAbs})` };
+        return                       { label: '✅ 대기',           cls: 'text-slate-300',           sub: `현재 ${drop.toFixed(1)}% / 기준 ${buyEnter}%(${enterAbs})` };
+      }
       const [lo, hi] = BUY_RANGE[ticker];
       const rangeAbs = `$${(ath * (1 + lo / 100)).toFixed(2)}~$${(ath * (1 + hi / 100)).toFixed(2)}`;
       for (const [thr, label, range] of BUY_LEVELS[ticker]) {
@@ -182,8 +188,7 @@
           return { label, cls, sub };
         }
       }
-      const range = ticker === 'QQQ' ? '-19~21%' : '-20~25%';
-      return { label: '✅ 대기', cls: 'text-slate-300', sub: `현재 ${drop.toFixed(1)}% / 기준 ${range}(${rangeAbs})` };
+      return { label: '✅ 대기', cls: 'text-slate-300', sub: `현재 ${drop.toFixed(1)}% / 기준 -20~25%(${rangeAbs})` };
     }
 
     function getHardStatus(ticker, drop, ath) {
@@ -195,8 +200,8 @@
         }
       }
       if (ticker === 'QQQ') {
-        const abs = ath * 0.70;
-        return { label: '✅ 대기', cls: 'text-slate-300', sub: `현재 ${drop.toFixed(1)}% / 기준 -30%($${abs.toFixed(2)})` };
+        const abs = ath * 0.65;
+        return { label: '✅ 대기', cls: 'text-slate-300', sub: `현재 ${drop.toFixed(1)}% / 기준 -35%($${abs.toFixed(2)})` };
       }
       const lo = ath * 0.65, hi = ath * 0.60;
       return { label: '✅ 대기', cls: 'text-slate-300', sub: `현재 ${drop.toFixed(1)}% / 기준 -35~40%($${lo.toFixed(2)}~$${hi.toFixed(2)})` };
@@ -241,11 +246,10 @@
             return { label: '💰 1차 매도!',     cls: 'text-orange-400 font-bold', sub: `ATH 대비 ${drop.toFixed(1)}% (기준 -5%, $${sell1Abs}) → TQQQ 50% 매도` };
           return   { label: '👁 1차 매도 감시 중', cls: 'text-green-400',           sub: `ATH 대비 ${drop.toFixed(1)}% / 기준 -5%($${sell1Abs})` };
         }
-        const cnt = data?.sell_2nd_count || 0;
-        const refAth = data?.sell_2nd_ath || ath;
-        if (cnt >= 2)
-          return { label: '💰 2차 매도!',           cls: 'text-orange-400 font-bold', sub: '동일 ATH -10% 2회 → 잔여 전량 매도' };
-        return   { label: `👁 2차 매도 감시 ${cnt}/2`, cls: 'text-green-400',           sub: `ATH $${refAth.toFixed(2)} 대비 ${drop.toFixed(1)}%` };
+        const sell2Abs = (ath * (1 + STRATEGY.QQQ.sell2ndDrop / 100)).toFixed(2);
+        if (data?.sell_2nd_done)
+          return { label: '💰 2차 매도!',      cls: 'text-orange-400 font-bold', sub: `ATH ${STRATEGY.QQQ.sell2ndDrop}%($${sell2Abs}) → 잔여 전량 매도` };
+        return   { label: '👁 2차 매도 감시 중', cls: 'text-green-400',            sub: `ATH 대비 ${drop.toFixed(1)}% / 기준 ${STRATEGY.QQQ.sell2ndDrop}%($${sell2Abs})` };
       } else {
         const { sellDays } = STRATEGY.SOXX;
         const consec   = data?.soxx_consecutive || 0;
@@ -447,16 +451,14 @@
       if (!stockData) stockData = {};
       const prev = stockData[ticker] || {};
       stockData[ticker] = {
-        infi_hae:           prev.infi_hae || null,
-        sell_ath:           prev.sell_ath  || null,
-        cycle_low:          val,
-        sell_unlocked:      false,
-        sell_1st_done:      false,
-        sell_2nd_ath:       null,
-        sell_2nd_count:     0,
-        sell_2nd_last_date: null,
-        soxx_consecutive:   0,
-        soxx_last_date:     null
+        infi_hae:         prev.infi_hae || null,
+        sell_ath:         prev.sell_ath  || null,
+        cycle_low:        val,
+        sell_unlocked:    false,
+        sell_1st_done:    false,
+        sell_2nd_done:    false,
+        soxx_consecutive: 0,
+        soxx_last_date:   null
       };
       const ok = await saveToGist();
       renderAll();
