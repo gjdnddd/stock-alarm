@@ -64,23 +64,36 @@
       SOXX: { infiLimit: -4, sellUnlock: 80, sellDrop:   -10,  sellDays:      5 }
     };
 
-    const BUY_LEVELS = {
-      SOXX: [[-25,'🚨 1+2+3차 도달','-20~25%'],[-22,'🚨 1+2차 도달','-20~25%'],[-20,'🚨 1차 도달','-20~25%'],[-15,'⚠️ 근접','1차 -20%']]
-    };
-
-    const BUY_RANGE = { SOXX: [-20, -25] };
-
     const HARD_LEVELS = {
-      QQQ:  [[-35,'💀 하드 진입','-35%'],[-25,'⚠️ 하드 근접','-35%']],
-      SOXX: [[-40,'💀 하드 2단계 진입','-40%'],[-35,'💀 하드 1단계 진입','-35%'],[-30,'⚠️ 하드 1단계 근접','-35%']]
+      QQQ:  [[-35,'💀 하드 진입','-35%'],[-25,'⚠️ 하드 근접','-35%']]
     };
+
+    const SOXX_BUY_LEVELS = [[-20,'1차'],[-22,'2차'],[-25,'3차']];
+    const SOXX_HARD_LEVELS = [[-35,'1단계'],[-40,'2단계']];
+    const SOXL_LEVERAGE = 2.9;
+
+    function soxlEstimate(level, ath, cp, soxlPrice) {
+      if (!soxlPrice || soxlPrice <= 0 || !cp || cp <= 0) return null;
+      const target = ath * (1 + level / 100);
+      const move   = target / cp - 1;
+      const est    = soxlPrice * (1 + SOXL_LEVERAGE * move);
+      return est > 0 ? est : null;
+    }
+
+    function fmtSoxxLevel(label, level, ath, cp, soxlPrice) {
+      const abs = ath * (1 + level / 100);
+      const est = soxlEstimate(level, ath, cp, soxlPrice);
+      const soxlPart = est !== null ? `(SOXL $${est.toFixed(2)})` : '';
+      return `${label} ${level}% $${abs.toFixed(2)}${soxlPart}`;
+    }
 
     // ── 상태 ───────────────────────────────────────────────────────
 
     let stockData = null;
     let prices = {
       QQQ:  { current: 0, ath: 0, closeDate: null, marketState: null },
-      SOXX: { current: 0, ath: 0, closeDate: null, marketState: null }
+      SOXX: { current: 0, ath: 0, closeDate: null, marketState: null },
+      SOXL: { current: 0, ath: 0, closeDate: null, marketState: null }
     };
 
     // ── 유틸 ───────────────────────────────────────────────────────
@@ -169,7 +182,7 @@
 
     // ── 전략 판정 (순수 함수) ──────────────────────────────────────
 
-    function getBuyStatus(ticker, drop, ath) {
+    function getBuyStatus(ticker, drop, ath, cp, soxlPrice) {
       if (ticker === 'QQQ') {
         const { buyEnter, buyNear } = STRATEGY.QQQ;
         const enterAbs = `$${(ath * (1 + buyEnter / 100)).toFixed(2)}`;
@@ -177,34 +190,32 @@
         if (drop <= buyNear)  return { label: '⚠️ 근접',          cls: 'text-yellow-400',         sub: `현재 ${drop.toFixed(1)}% / 기준 ${buyEnter}%(${enterAbs})` };
         return                       { label: '✅ 대기',           cls: 'text-slate-300',           sub: `현재 ${drop.toFixed(1)}% / 기준 ${buyEnter}%(${enterAbs})` };
       }
-      const [lo, hi] = BUY_RANGE[ticker];
-      const rangeAbs = `$${(ath * (1 + lo / 100)).toFixed(2)}~$${(ath * (1 + hi / 100)).toFixed(2)}`;
-      for (const [thr, label, range] of BUY_LEVELS[ticker]) {
-        if (drop <= thr) {
-          const cls = label.startsWith('🚨') ? 'text-red-400 font-bold' : 'text-yellow-400';
-          const sub = label.startsWith('🚨')
-            ? `현재 ${drop.toFixed(1)}% / 기준 ${range}(${rangeAbs})`
-            : `현재 ${drop.toFixed(1)}% / ${range}($${(ath * (1 + lo / 100)).toFixed(2)})`;
-          return { label, cls, sub };
-        }
-      }
-      return { label: '✅ 대기', cls: 'text-slate-300', sub: `현재 ${drop.toFixed(1)}% / 기준 -20~25%(${rangeAbs})` };
+      const detail  = SOXX_BUY_LEVELS.map(([thr, lbl]) => fmtSoxxLevel(lbl, thr, ath, cp, soxlPrice)).join(' / ');
+      const reached = SOXX_BUY_LEVELS.filter(([thr]) => drop <= thr).map(([, lbl]) => lbl);
+      if (reached.length)
+        return { label: `🚨 ${reached.join('+')} 도달`, cls: 'text-red-400 font-bold', sub: `현재 ${drop.toFixed(1)}% | ${detail}` };
+      if (drop <= -15)
+        return { label: '⚠️ 근접', cls: 'text-yellow-400', sub: `현재 ${drop.toFixed(1)}% | ${detail}` };
+      return { label: '✅ 대기', cls: 'text-slate-300', sub: `현재 ${drop.toFixed(1)}% | ${detail}` };
     }
 
-    function getHardStatus(ticker, drop, ath) {
-      for (const [thr, label, range] of HARD_LEVELS[ticker]) {
-        if (drop <= thr) {
-          const cls = label.startsWith('💀') ? 'text-red-400 font-black' : 'text-orange-400';
-          const abs = ath * (1 + parseFloat(range) / 100);
-          return { label, cls, sub: `현재 ${drop.toFixed(1)}% / 기준 ${range}($${abs.toFixed(2)})` };
-        }
-      }
+    function getHardStatus(ticker, drop, ath, cp, soxlPrice) {
       if (ticker === 'QQQ') {
+        for (const [thr, label, range] of HARD_LEVELS.QQQ) {
+          if (drop <= thr) {
+            const cls = label.startsWith('💀') ? 'text-red-400 font-black' : 'text-orange-400';
+            const abs = ath * (1 + parseFloat(range) / 100);
+            return { label, cls, sub: `현재 ${drop.toFixed(1)}% / 기준 ${range}($${abs.toFixed(2)})` };
+          }
+        }
         const abs = ath * 0.65;
         return { label: '✅ 대기', cls: 'text-slate-300', sub: `현재 ${drop.toFixed(1)}% / 기준 -35%($${abs.toFixed(2)})` };
       }
-      const lo = ath * 0.65, hi = ath * 0.60;
-      return { label: '✅ 대기', cls: 'text-slate-300', sub: `현재 ${drop.toFixed(1)}% / 기준 -35~40%($${lo.toFixed(2)}~$${hi.toFixed(2)})` };
+      const detail = SOXX_HARD_LEVELS.map(([thr, lbl]) => fmtSoxxLevel(lbl, thr, ath, cp, soxlPrice)).join(' / ');
+      if (drop <= -40) return { label: '💀 2단계 진입',  cls: 'text-red-400 font-black', sub: `현재 ${drop.toFixed(1)}% | ${detail}` };
+      if (drop <= -35) return { label: '💀 1단계 진입',  cls: 'text-red-400 font-black', sub: `현재 ${drop.toFixed(1)}% | ${detail}` };
+      if (drop <= -30) return { label: '⚠️ 1단계 근접', cls: 'text-orange-400',         sub: `현재 ${drop.toFixed(1)}% | ${detail}` };
+      return             { label: '✅ 대기',            cls: 'text-slate-300',           sub: `현재 ${drop.toFixed(1)}% | ${detail}` };
     }
 
     function getInfiStatus(ticker, data, cp) {
@@ -351,8 +362,8 @@
           <!-- 상태 행 -->
           <div class="space-y-2">
             ${statusRow('무매', getInfiStatus(ticker, data, cp))}
-            ${statusRow('매수', getBuyStatus(ticker, drop, ath))}
-            ${statusRow('하드', getHardStatus(ticker, drop, ath))}
+            ${statusRow('매수', getBuyStatus(ticker, drop, ath, cp, prices.SOXL.current))}
+            ${statusRow('하드', getHardStatus(ticker, drop, ath, cp, prices.SOXL.current))}
             ${statusRow('매도', getSellStatus(ticker, data, drop, gain, ath, cycleLow))}
           </div>
 
@@ -515,9 +526,10 @@
     async function refreshAll() {
       setStatus('데이터 동기화 중...');
       await fetchGistData();
-      const [q, s] = await Promise.all([fetchPrice('QQQ'), fetchPrice('SOXX')]);
-      if (q) prices.QQQ = q;
-      if (s) prices.SOXX = s;
+      const [q, s, sl] = await Promise.all([fetchPrice('QQQ'), fetchPrice('SOXX'), fetchPrice('SOXL')]);
+      if (q)  prices.QQQ  = q;
+      if (s)  prices.SOXX = s;
+      if (sl) prices.SOXL = sl;
       await updateSellAth();
       const updatedConsec = await updateSoxxCount();
       renderAll();

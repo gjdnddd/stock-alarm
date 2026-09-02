@@ -95,7 +95,8 @@ class StockAlarm:
             if gain_pct is not None:
                 self.qqq_sell_alerts(ath, cur_p, drop_pct, gain_pct, t, alerts, close_date)
         else:
-            self.soxx_buy_alerts(ath, drop_pct, alerts)
+            _, soxl_price, _ = self.get_price("SOXL")
+            self.soxx_buy_alerts(ath, cur_p, soxl_price, drop_pct, alerts)
             if gain_pct is not None:
                 self.soxx_sell_alerts(ath, cur_p, drop_pct, gain_pct, t, alerts, close_date)
 
@@ -129,22 +130,36 @@ class StockAlarm:
 
     # ── SOXX 매수 ──────────────────────────────────────────────────────────────
 
-    def soxx_buy_alerts(self, ath, drop_pct, alerts):
-        buy_levels = [(-20, "1차 10%"), (-22, "2차 10%"), (-25, "3차 80%")]
-        reached = [(thr, lbl) for thr, lbl in buy_levels if drop_pct <= thr]
-        if reached:
-            labels = " + ".join(lbl for _, lbl in reached)
-            lo, hi = buy_levels[0][0], buy_levels[-1][0]
-            alerts.append(f"🚨 [SOXX→SOXL] 매수 타점 도달: {labels} (현재 {drop_pct:+.1f}% / 기준 {lo:.0f}~{hi:.0f}%(${ath * (1 + lo / 100):.2f}~${ath * (1 + hi / 100):.2f}))")
-        elif drop_pct <= -15:
-            alerts.append(f"⚠️ [SOXX] 매수 타점 근접 (현재 {drop_pct:+.1f}% / 1차 기준 -20%(${ath * 0.80:.2f}))")
+    def soxx_buy_alerts(self, ath, cur_p, soxl_price, drop_pct, alerts):
+        def fmt_level(label, level):
+            abs_price = ath * (1 + level / 100)
+            soxl_part = ""
+            if soxl_price > 0 and cur_p > 0:
+                move = abs_price / cur_p - 1
+                soxl_est = soxl_price * (1 + 2.9 * move)
+                soxl_part = f"(SOXL ${soxl_est:.2f})" if soxl_est > 0 else ""
+            return f"{label} {level:.0f}% ${abs_price:.2f}{soxl_part}"
 
+        buy_levels = [(-20, "1차"), (-22, "2차"), (-25, "3차")]
+        buy_detail = " / ".join(fmt_level(lbl, thr) for thr, lbl in buy_levels)
+        reached = [lbl for thr, lbl in buy_levels if drop_pct <= thr]
+        if reached:
+            alerts.append(f"🚨 [SOXX→SOXL] 매수 타점 도달: {'+'.join(reached)} (현재 {drop_pct:+.1f}%) | {buy_detail}")
+        elif drop_pct <= -15:
+            alerts.append(f"⚠️ [SOXX] 매수 타점 근접 (현재 {drop_pct:+.1f}%) | {buy_detail}")
+        else:
+            alerts.append(f"✅ [SOXX] 매수 타점 대기 (현재 {drop_pct:+.1f}%) | {buy_detail}")
+
+        hard_levels = [(-35, "1단계"), (-40, "2단계")]
+        hard_detail = " / ".join(fmt_level(lbl, thr) for thr, lbl in hard_levels)
         if drop_pct <= -40:
-            alerts.append(f"💀 [SOXX] 하드 2단계 진입 조건 도달 (현재 {drop_pct:+.1f}% / 기준 -40%(${ath * 0.60:.2f}))")
+            alerts.append(f"💀 [SOXX] 하드 2단계 진입 조건 도달 (현재 {drop_pct:+.1f}%) | {hard_detail}")
         elif drop_pct <= -35:
-            alerts.append(f"💀 [SOXX] 하드 1단계 진입 / 하드 2단계 근접 (현재 {drop_pct:+.1f}% / 기준 -40%(${ath * 0.60:.2f}))")
+            alerts.append(f"💀 [SOXX] 하드 1단계 진입 / 하드 2단계 근접 (현재 {drop_pct:+.1f}%) | {hard_detail}")
         elif drop_pct <= -30:
-            alerts.append(f"⚠️ [SOXX] 하드 1단계 근접 (현재 {drop_pct:+.1f}% / 기준 -35%(${ath * 0.65:.2f}))")
+            alerts.append(f"⚠️ [SOXX] 하드 1단계 근접 (현재 {drop_pct:+.1f}%) | {hard_detail}")
+        else:
+            alerts.append(f"✅ [SOXX] 하드 대기 (현재 {drop_pct:+.1f}%) | {hard_detail}")
 
     # ── QQQ 매도 ───────────────────────────────────────────────────────────────
 
