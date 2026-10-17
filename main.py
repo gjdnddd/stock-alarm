@@ -3,6 +3,35 @@ import os, yfinance as yf, requests, json
 def clean_env(name):
     return os.environ.get(name, "").strip().lstrip("﻿")
 
+# ── 매수/하드 기준 상수 (ATH 대비 하락률 %) ───────────────────────────────────
+QQQ_BUY_ENTER = -15
+QQQ_BUY_NEAR = -10
+
+# 하드 2단계: near1(1단계 근접, 없으면 None) / enter1 / near2 / enter2
+HARD_LEVELS = {
+    "QQQ":  {"near1": -20,  "enter1": -25, "near2": -30, "enter2": -35},
+    "SOXX": {"near1": None, "enter1": -30, "near2": -35, "enter2": -40},
+}
+HARD_RATIO_1 = "평가금 1/4"
+HARD_RATIO_2 = "평가금 100%"
+
+
+def hard_level_list(cfg):
+    return [(cfg["enter1"], "1단계"), (cfg["enter2"], "2단계")]
+
+
+def hard_status(cfg, drop):
+    """(아이콘, 문구) 반환. 아이콘 ✅ 이면 대기."""
+    if drop <= cfg["enter2"]:
+        return "💀", f"하드 2단계 진입 ({HARD_RATIO_2})"
+    if drop <= cfg["near2"]:
+        return "💀", f"하드 1단계 진입 ({HARD_RATIO_1}) / 2단계 근접 (다음 {HARD_RATIO_2})"
+    if drop <= cfg["enter1"]:
+        return "💀", f"하드 1단계 진입 ({HARD_RATIO_1})"
+    if cfg["near1"] is not None and drop <= cfg["near1"]:
+        return "⚠️", f"하드 1단계 근접 (다음 {HARD_RATIO_1})"
+    return "✅", "하드 대기"
+
 
 class StockAlarm:
     def __init__(self):
@@ -118,15 +147,17 @@ class StockAlarm:
     # ── QQQ 매수 ───────────────────────────────────────────────────────────────
 
     def qqq_buy_alerts(self, ath, drop_pct, alerts):
-        if drop_pct <= -15:
-            alerts.append(f"🚨 [QQQ→TQQQ] 매수 타점 도달 (현재 {drop_pct:+.1f}% / 기준 -15%(${ath * 0.85:.2f}))")
-        elif drop_pct <= -11:
-            alerts.append(f"⚠️ [QQQ] 매수 타점 근접 (현재 {drop_pct:+.1f}% / 기준 -15%(${ath * 0.85:.2f}))")
+        buy_abs = ath * (1 + QQQ_BUY_ENTER / 100)
+        if drop_pct <= QQQ_BUY_ENTER:
+            alerts.append(f"🚨 [QQQ→TQQQ] 매수 타점 도달 (현재 {drop_pct:+.1f}% / 기준 {QQQ_BUY_ENTER}%(${buy_abs:.2f}))")
+        elif drop_pct <= QQQ_BUY_NEAR:
+            alerts.append(f"⚠️ [QQQ] 매수 타점 근접 (현재 {drop_pct:+.1f}% / 기준 {QQQ_BUY_ENTER}%(${buy_abs:.2f}))")
 
-        if drop_pct <= -35:
-            alerts.append(f"💀 [QQQ] 하드 사이클 진입 조건 도달 (현재 {drop_pct:+.1f}% / 기준 -35%(${ath * 0.65:.2f}))")
-        elif drop_pct <= -25:
-            alerts.append(f"⚠️ [QQQ] 하드 사이클 근접 (현재 {drop_pct:+.1f}% / 기준 -35%(${ath * 0.65:.2f}))")
+        cfg = HARD_LEVELS["QQQ"]
+        icon, text = hard_status(cfg, drop_pct)
+        if icon != "✅":
+            detail = " / ".join(f"{lbl} {thr}%(${ath * (1 + thr / 100):.2f})" for thr, lbl in hard_level_list(cfg))
+            alerts.append(f"{icon} [QQQ] {text} (현재 {drop_pct:+.1f}% / 기준 {detail})")
 
     # ── SOXX 매수 ──────────────────────────────────────────────────────────────
 
@@ -150,16 +181,10 @@ class StockAlarm:
         else:
             alerts.append(f"✅ [SOXX] 매수 타점 대기 (현재 {drop_pct:+.1f}%) | {buy_detail}")
 
-        hard_levels = [(-35, "1단계"), (-40, "2단계")]
-        hard_detail = " / ".join(fmt_level(lbl, thr) for thr, lbl in hard_levels)
-        if drop_pct <= -40:
-            alerts.append(f"💀 [SOXX] 하드 2단계 진입 조건 도달 (현재 {drop_pct:+.1f}%) | {hard_detail}")
-        elif drop_pct <= -35:
-            alerts.append(f"💀 [SOXX] 하드 1단계 진입 / 하드 2단계 근접 (현재 {drop_pct:+.1f}%) | {hard_detail}")
-        elif drop_pct <= -30:
-            alerts.append(f"⚠️ [SOXX] 하드 1단계 근접 (현재 {drop_pct:+.1f}%) | {hard_detail}")
-        else:
-            alerts.append(f"✅ [SOXX] 하드 대기 (현재 {drop_pct:+.1f}%) | {hard_detail}")
+        cfg = HARD_LEVELS["SOXX"]
+        hard_detail = " / ".join(fmt_level(lbl, thr) for thr, lbl in hard_level_list(cfg))
+        icon, text = hard_status(cfg, drop_pct)
+        alerts.append(f"{icon} [SOXX] {text} (현재 {drop_pct:+.1f}%) | {hard_detail}")
 
     # ── QQQ 매도 ───────────────────────────────────────────────────────────────
 
