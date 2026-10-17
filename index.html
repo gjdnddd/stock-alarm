@@ -60,16 +60,20 @@
     // ── 상수 ───────────────────────────────────────────────────────
 
     const STRATEGY = {
-      QQQ:  { infiLimit: -3, sellUnlock: 90, sell1stDrop: -5,  sell2ndDrop: -10, buyEnter: -15, buyNear: -11 },
+      QQQ:  { infiLimit: -3, sellUnlock: 90, sell1stDrop: -5,  sell2ndDrop: -10, buyEnter: -15, buyNear: -10 },
       SOXX: { infiLimit: -4, sellUnlock: 80, sellDrop:   -10,  sellDays:      5 }
     };
 
+    // 하드 2단계: near1(1단계 근접, 없으면 null) / enter1 / near2 / enter2  (main.py와 동일)
     const HARD_LEVELS = {
-      QQQ:  [[-35,'💀 하드 진입','-35%'],[-25,'⚠️ 하드 근접','-35%']]
+      QQQ:  { near1: -20,  enter1: -25, near2: -30, enter2: -35 },
+      SOXX: { near1: null, enter1: -30, near2: -35, enter2: -40 }
     };
+    const HARD_RATIO_1 = '평가금 1/4';
+    const HARD_RATIO_2 = '평가금 100%';
 
     const SOXX_BUY_LEVELS = [[-20,'1차'],[-22,'2차'],[-25,'3차']];
-    const SOXX_HARD_LEVELS = [[-35,'1단계'],[-40,'2단계']];
+    const hardLevelList = cfg => [[cfg.enter1, '1단계'], [cfg.enter2, '2단계']];
     const SOXL_LEVERAGE = 2.9;
 
     function soxlEstimate(level, ath, cp, soxlPrice) {
@@ -200,22 +204,24 @@
     }
 
     function getHardStatus(ticker, drop, ath, cp, soxlPrice) {
-      if (ticker === 'QQQ') {
-        for (const [thr, label, range] of HARD_LEVELS.QQQ) {
-          if (drop <= thr) {
-            const cls = label.startsWith('💀') ? 'text-red-400 font-black' : 'text-orange-400';
-            const abs = ath * (1 + parseFloat(range) / 100);
-            return { label, cls, sub: `현재 ${drop.toFixed(1)}% / 기준 ${range}($${abs.toFixed(2)})` };
-          }
-        }
-        const abs = ath * 0.65;
-        return { label: '✅ 대기', cls: 'text-slate-300', sub: `현재 ${drop.toFixed(1)}% / 기준 -35%($${abs.toFixed(2)})` };
-      }
-      const detail = SOXX_HARD_LEVELS.map(([thr, lbl]) => fmtSoxxLevel(lbl, thr, ath, cp, soxlPrice)).join(' / ');
-      if (drop <= -40) return { label: '💀 2단계 진입',  cls: 'text-red-400 font-black', sub: `현재 ${drop.toFixed(1)}% | ${detail}` };
-      if (drop <= -35) return { label: '💀 1단계 진입',  cls: 'text-red-400 font-black', sub: `현재 ${drop.toFixed(1)}% | ${detail}` };
-      if (drop <= -30) return { label: '⚠️ 1단계 근접', cls: 'text-orange-400',         sub: `현재 ${drop.toFixed(1)}% | ${detail}` };
-      return             { label: '✅ 대기',            cls: 'text-slate-300',           sub: `현재 ${drop.toFixed(1)}% | ${detail}` };
+      const cfg = HARD_LEVELS[ticker === 'QQQ' ? 'QQQ' : 'SOXX'];
+      const { icon, text } = hardStatus(cfg, drop);
+      const cls = icon === '💀' ? 'text-red-400 font-black' : icon === '⚠️' ? 'text-orange-400' : 'text-slate-300';
+      const label = icon === '✅' ? '✅ 대기' : `${icon} ${text}`;
+      const levels = hardLevelList(cfg);
+      const sub = ticker === 'QQQ'
+        ? `현재 ${drop.toFixed(1)}% / 기준 ${levels.map(([thr, lbl]) => `${lbl} ${thr}%($${(ath * (1 + thr / 100)).toFixed(2)})`).join(' / ')}`
+        : `현재 ${drop.toFixed(1)}% | ${levels.map(([thr, lbl]) => fmtSoxxLevel(lbl, thr, ath, cp, soxlPrice)).join(' / ')}`;
+      return { label, cls, sub };
+    }
+
+    // main.py hard_status와 동일 판정/문구
+    function hardStatus(cfg, drop) {
+      if (drop <= cfg.enter2) return { icon: '💀', text: `하드 2단계 진입 (${HARD_RATIO_2})` };
+      if (drop <= cfg.near2)  return { icon: '💀', text: `하드 1단계 진입 (${HARD_RATIO_1}) / 2단계 근접 (다음 ${HARD_RATIO_2})` };
+      if (drop <= cfg.enter1) return { icon: '💀', text: `하드 1단계 진입 (${HARD_RATIO_1})` };
+      if (cfg.near1 !== null && drop <= cfg.near1) return { icon: '⚠️', text: `하드 1단계 근접 (다음 ${HARD_RATIO_1})` };
+      return { icon: '✅', text: '하드 대기' };
     }
 
     function getInfiStatus(ticker, data, cp) {
