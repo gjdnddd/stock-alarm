@@ -1,7 +1,40 @@
 import os, yfinance as yf, requests, json
+from datetime import date, timedelta
 
 def clean_env(name):
     return os.environ.get(name, "").strip().lstrip("﻿")
+
+# ── 분할(스플릿) 감지 ─────────────────────────────────────────────────────────
+SPLIT_JUMP_LOW, SPLIT_JUMP_HIGH = 0.6, 1.7   # 일간 종가 비율이 이 범위 밖이면 가격 불연속(분할 의심)
+SPLIT_WINDOW = 40                            # 최근 N거래일 안에서 불연속을 찾는다
+SPLIT_FIRST_LOOKBACK_DAYS = 10               # split_checked 가 없으면 이 기간 안의 분할만 '새 분할'로 본다
+
+
+def round_split_ratio(r):
+    """가격 비율(직전/현재)을 0.5 단위 분할 비율로 반올림. 정분할은 N(>=1), 역분할은 1/N(<1)."""
+    if r >= 1:
+        return max(round(r * 2) / 2, 1.0)
+    inv = round((1 / r) * 2) / 2
+    return 1 / inv if inv > 0 else r
+
+
+def fmt_split_ratio(r):
+    return f"{r:g}:1" if r >= 1 else f"1:{1 / r:g}"
+
+
+def find_price_jump(closes, window=SPLIT_WINDOW):
+    """최근 window 거래일 종가에서 분할로 보이는 불연속(가장 최근 1건)을 찾는다.
+    Yahoo가 과거 종가를 아직 분할 조정하지 않았을 때 나타난다. 없으면 None."""
+    s = closes.dropna().tail(window + 1)
+    if len(s) < 2:
+        return None
+    ratio = s / s.shift(1)
+    bad = ratio[(ratio <= SPLIT_JUMP_LOW) | (ratio >= SPLIT_JUMP_HIGH)].dropna()
+    if bad.empty:
+        return None
+    idx = bad.index[-1]
+    prev = float(s.shift(1).loc[idx])
+    return {"date": idx.date().isoformat(), "ratio": round_split_ratio(prev / float(s.loc[idx]))}
 
 # ── 매수/하드 기준 상수 (ATH 대비 하락률 %) ───────────────────────────────────
 QQQ_BUY_ENTER = -15
@@ -37,6 +70,7 @@ class StockAlarm:
     def __init__(self):
         self.config = self.load_config()
         self.config_updated = False
+        self.price_jump = {}   # ticker -> {"date","ratio"} (가격 불연속, 없으면 None)
 
     def load_config(self):
         test_path = os.environ.get('TEST_CONFIG_PATH')
@@ -67,12 +101,71 @@ class StockAlarm:
         if forced_price:
             close = float(forced_price)
             ath = float(forced_ath) if forced_ath else close
+            forced_jump = os.environ.get(f'TEST_{ticker}_JUMP')   # "YYYY-MM-DD:비율"
+            if forced_jump:
+                d, r = forced_jump.split(':')
+                self.price_jump[ticker] = {"date": d, "ratio": float(r)}
+            else:
+                self.price_jump[ticker] = None
             return ath, close, "test"
         stock = yf.Ticker(ticker)
         df = stock.history(period="max")
         if df.empty:
+            self.price_jump[ticker] = None
             return 0, 0, None
+        self.price_jump[ticker] = find_price_jump(df['Close'])
         return float(df['Close'].max()), float(df['Close'].iloc[-1]), df.index[-1].date().isoformat()
+
+    def get_splits(self, ticker):
+        """yfinance가 등록한 분할 이벤트 [(날짜 ISO, 비율)]. 정분할 3:1 이면 3.0."""
+        forced = os.environ.get(f'TEST_{ticker}_SPLIT')           # "YYYY-MM-DD:비율"
+        if forced:
+            d, r = forced.split(':')
+            return [(d, float(r))]
+        try:
+            return [(idx.date().isoformat(), float(v))
+                    for idx, v in yf.Ticker(ticker).splits.items() if v and v > 0]
+        except Exception:
+            return []
+
+    def split_hold(self, ticker, t):
+        """분할 보정이 필요하거나 Yahoo 과거 데이터가 아직 미조정이면 알림을 보류하고 안내 메시지를 돌려준다.
+        저장된 절대가(infi_hae/cycle_low/sell_ath)는 여기서 절대 자동 수정하지 않는다 —
+        텔레그램 안내 후 대시보드에서 사용자가 '분할 보정 적용'을 눌러야 반영된다."""
+        checked = t.get("split_checked") or (date.today() - timedelta(days=SPLIT_FIRST_LOOKBACK_DAYS)).isoformat()
+        jump = self.price_jump.get(ticker)
+        if jump and jump["date"] <= (t.get("split_dismissed") or ""):
+            jump = None   # 사용자가 '분할 아님'으로 처리한 불연속
+        events = [(d, r) for d, r in self.get_splits(ticker) if d > checked]
+
+        candidate = None
+        if jump and jump["date"] > checked:
+            candidate = {"date": jump["date"], "ratio": jump["ratio"], "source": "price_jump"}
+        elif events and not jump:   # 이벤트 등록 + 과거 종가 조정 완료 → 정확한 비율
+            d, r = events[-1]
+            candidate = {"date": d, "ratio": r, "source": "yfinance"}
+
+        pending = t.get("pending_split")
+        fresh = False
+        if candidate and candidate != pending:
+            t["pending_split"] = pending = candidate
+            self.config_updated = True
+            fresh = True
+        if pending:
+            return self.split_pending_message(ticker, pending, fresh)
+        if jump:   # 보정은 확정됐지만 Yahoo 과거 데이터가 아직 분할 미반영 → ATH 신뢰 불가
+            return f"⏳ *{ticker}* 분할 보정은 완료됐지만 Yahoo 과거 데이터가 아직 조정되지 않아 알림을 보류합니다 (조정되면 자동 재개)."
+        return None
+
+    def split_pending_message(self, ticker, pending, fresh):
+        ratio = fmt_split_ratio(pending["ratio"])
+        if pending.get("source") == "yfinance":
+            why = f"분할 감지: {ratio} ({pending['date']})"
+        else:
+            why = f"가격 불연속 감지: {pending['date']} (약 {ratio} 분할 추정, Yahoo 과거 데이터 미조정 가능)"
+        return (f"{'⚠️' if fresh else '⏳'} *{ticker}* {why}\n"
+                f"  저장된 무매 HAE·사이클 저점·매도 ATH를 {pending['ratio']:g}로 나눠 보정해야 합니다.\n"
+                f"  대시보드의 '분할 보정 적용' 버튼으로 확정해주세요. 확정 전까지 {ticker} 알림은 보류됩니다.")
 
     def run(self):
         messages = []
@@ -92,6 +185,12 @@ class StockAlarm:
 
         drop_pct = (cur_p / ath - 1) * 100
         t = self.config.setdefault(ticker, {})
+
+        # 분할 의심/보정 대기 중이면 저장값(HAE·저점)을 건드리거나 알림을 내기 전에 보류
+        hold = self.split_hold(ticker, t)
+        if hold:
+            return hold
+
         cycle_low = t.get("cycle_low")
 
         # 무매 HAE 자동 갱신
