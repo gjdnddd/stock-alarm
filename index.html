@@ -74,21 +74,23 @@
 
     const SOXX_BUY_LEVELS = [[-20,'1차'],[-22,'2차'],[-25,'3차']];
     const hardLevelList = cfg => [[cfg.enter1, '1단계'], [cfg.enter2, '2단계']];
-    const SOXL_LEVERAGE = 2.9;
+    // 레버리지 ETF(TQQQ/SOXL) 추정 배율 — 3배를 정확히 추종하지 않으므로 2.9 (main.py ETF_LEVERAGE와 동일)
+    const ETF_LEVERAGE = 2.9;
+    const ETF_OF = { QQQ: 'TQQQ', SOXX: 'SOXL' };
 
-    function soxlEstimate(level, ath, cp, soxlPrice) {
-      if (!soxlPrice || soxlPrice <= 0 || !cp || cp <= 0) return null;
+    function etfEstimate(level, ath, cp, etfPrice) {
+      if (!etfPrice || etfPrice <= 0 || !cp || cp <= 0) return null;
       const target = ath * (1 + level / 100);
       const move   = target / cp - 1;
-      const est    = soxlPrice * (1 + SOXL_LEVERAGE * move);
-      return est > 0 ? est : null;
+      const est    = etfPrice * (1 + ETF_LEVERAGE * move);
+      return est > 0 ? est : null;   // 큰 괴리에서 선형식이 0 이하로 깨지면 생략
     }
 
-    function fmtSoxxLevel(label, level, ath, cp, soxlPrice) {
+    function fmtEtfLevel(label, level, ath, cp, etfName, etfPrice) {
       const abs = ath * (1 + level / 100);
-      const est = soxlEstimate(level, ath, cp, soxlPrice);
-      const soxlPart = est !== null ? `(SOXL $${est.toFixed(2)})` : '';
-      return `${label} ${level}% $${abs.toFixed(2)}${soxlPart}`;
+      const est = etfEstimate(level, ath, cp, etfPrice);
+      const etfPart = est !== null ? `(${etfName} $${est.toFixed(2)})` : '';
+      return `${label} ${level}% $${abs.toFixed(2)}${etfPart}`;
     }
 
     // ── 분할(스플릿) 처리 ──────────────────────────────────────────
@@ -128,7 +130,8 @@
     let prices = {
       QQQ:  { current: 0, ath: 0, closeDate: null, marketState: null, jump: null },
       SOXX: { current: 0, ath: 0, closeDate: null, marketState: null, jump: null },
-      SOXL: { current: 0, ath: 0, closeDate: null, marketState: null, jump: null }
+      SOXL: { current: 0, ath: 0, closeDate: null, marketState: null, jump: null },
+      TQQQ: { current: 0, ath: 0, closeDate: null, marketState: null, jump: null }
     };
 
     // ── 유틸 ───────────────────────────────────────────────────────
@@ -226,15 +229,16 @@
 
     // ── 전략 판정 (순수 함수) ──────────────────────────────────────
 
-    function getBuyStatus(ticker, drop, ath, cp, soxlPrice) {
+    function getBuyStatus(ticker, drop, ath, cp, etfPrice) {
+      const etfName = ETF_OF[ticker];
       if (ticker === 'QQQ') {
         const { buyEnter, buyNear } = STRATEGY.QQQ;
-        const enterAbs = `$${(ath * (1 + buyEnter / 100)).toFixed(2)}`;
-        if (drop <= buyEnter) return { label: '🚨 매수 타점 도달', cls: 'text-red-400 font-bold', sub: `현재 ${drop.toFixed(1)}% / 기준 ${buyEnter}%(${enterAbs})` };
-        if (drop <= buyNear)  return { label: '⚠️ 근접',          cls: 'text-yellow-400',         sub: `현재 ${drop.toFixed(1)}% / 기준 ${buyEnter}%(${enterAbs})` };
-        return                       { label: '✅ 대기',           cls: 'text-slate-300',           sub: `현재 ${drop.toFixed(1)}% / 기준 ${buyEnter}%(${enterAbs})` };
+        const detail = fmtEtfLevel('매수', buyEnter, ath, cp, etfName, etfPrice);
+        if (drop <= buyEnter) return { label: '🚨 매수 타점 도달', cls: 'text-red-400 font-bold', sub: `현재 ${drop.toFixed(1)}% | ${detail}` };
+        if (drop <= buyNear)  return { label: '⚠️ 근접',          cls: 'text-yellow-400',         sub: `현재 ${drop.toFixed(1)}% | ${detail}` };
+        return                       { label: '✅ 대기',           cls: 'text-slate-300',           sub: `현재 ${drop.toFixed(1)}% | ${detail}` };
       }
-      const detail  = SOXX_BUY_LEVELS.map(([thr, lbl]) => fmtSoxxLevel(lbl, thr, ath, cp, soxlPrice)).join(' / ');
+      const detail  = SOXX_BUY_LEVELS.map(([thr, lbl]) => fmtEtfLevel(lbl, thr, ath, cp, etfName, etfPrice)).join(' / ');
       const reached = SOXX_BUY_LEVELS.filter(([thr]) => drop <= thr).map(([, lbl]) => lbl);
       if (reached.length)
         return { label: `🚨 ${reached.join('+')} 도달`, cls: 'text-red-400 font-bold', sub: `현재 ${drop.toFixed(1)}% | ${detail}` };
@@ -243,15 +247,13 @@
       return { label: '✅ 대기', cls: 'text-slate-300', sub: `현재 ${drop.toFixed(1)}% | ${detail}` };
     }
 
-    function getHardStatus(ticker, drop, ath, cp, soxlPrice) {
+    function getHardStatus(ticker, drop, ath, cp, etfPrice) {
       const cfg = HARD_LEVELS[ticker === 'QQQ' ? 'QQQ' : 'SOXX'];
       const { icon, text } = hardStatus(cfg, drop);
       const cls = icon === '💀' ? 'text-red-400 font-black' : icon === '⚠️' ? 'text-orange-400' : 'text-slate-300';
       const label = icon === '✅' ? '✅ 대기' : `${icon} ${text}`;
       const levels = hardLevelList(cfg);
-      const sub = ticker === 'QQQ'
-        ? `현재 ${drop.toFixed(1)}% / 기준 ${levels.map(([thr, lbl]) => `${lbl} ${thr}%($${(ath * (1 + thr / 100)).toFixed(2)})`).join(' / ')}`
-        : `현재 ${drop.toFixed(1)}% | ${levels.map(([thr, lbl]) => fmtSoxxLevel(lbl, thr, ath, cp, soxlPrice)).join(' / ')}`;
+      const sub = `현재 ${drop.toFixed(1)}% | ${levels.map(([thr, lbl]) => fmtEtfLevel(lbl, thr, ath, cp, ETF_OF[ticker], etfPrice)).join(' / ')}`;
       return { label, cls, sub };
     }
 
@@ -446,8 +448,8 @@
           <!-- 상태 행 -->
           ${splitState(ticker) ? '' : `<div class="space-y-2">
             ${statusRow('무매', getInfiStatus(ticker, data, cp))}
-            ${statusRow('매수', getBuyStatus(ticker, drop, ath, cp, prices.SOXL.current))}
-            ${statusRow('하드', getHardStatus(ticker, drop, ath, cp, prices.SOXL.current))}
+            ${statusRow('매수', getBuyStatus(ticker, drop, ath, cp, prices[etf].current))}
+            ${statusRow('하드', getHardStatus(ticker, drop, ath, cp, prices[etf].current))}
             ${statusRow('매도', getSellStatus(ticker, data, drop, gain, ath, cycleLow))}
           </div>`}
 
@@ -656,10 +658,11 @@
     async function refreshAll() {
       setStatus('데이터 동기화 중...');
       await fetchGistData();
-      const [q, s, sl] = await Promise.all([fetchPrice('QQQ'), fetchPrice('SOXX'), fetchPrice('SOXL')]);
+      const [q, s, sl, tq] = await Promise.all([fetchPrice('QQQ'), fetchPrice('SOXX'), fetchPrice('SOXL'), fetchPrice('TQQQ')]);
       if (q)  prices.QQQ  = q;
       if (s)  prices.SOXX = s;
       if (sl) prices.SOXL = sl;
+      if (tq) prices.TQQQ = tq;
       await updateSellAth();
       const updatedConsec = await updateSoxxCount();
       renderAll();

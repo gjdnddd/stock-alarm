@@ -10,6 +10,21 @@ SPLIT_WINDOW = 40                            # 최근 N거래일 안에서 불�
 SPLIT_FIRST_LOOKBACK_DAYS = 10               # split_checked 가 없으면 이 기간 안의 분할만 '새 분할'로 본다
 
 
+# 레버리지 ETF 추정 배율 (3배를 정확히 추종하지 않으므로 2.9)
+ETF_LEVERAGE = 2.9
+
+
+def fmt_etf_level(label, level, ath, cur_p, etf_name, etf_price):
+    """레벨(ATH 대비 %)의 기초자산 목표가와, '현재가→목표가' 필요 변동률 x 레버리지로 추정한 ETF 가격을 문자열로.
+    ETF 가격을 못 구했거나 추정치가 0 이하(큰 괴리에서 선형식이 깨짐)면 ETF 부분은 생략한다."""
+    abs_price = ath * (1 + level / 100)
+    etf_part = ""
+    if etf_price > 0 and cur_p > 0:
+        est = etf_price * (1 + ETF_LEVERAGE * (abs_price / cur_p - 1))
+        etf_part = f"({etf_name} ${est:.2f})" if est > 0 else ""
+    return f"{label} {level:.0f}% ${abs_price:.2f}{etf_part}"
+
+
 def round_split_ratio(r):
     """가격 비율(직전/현재)을 0.5 단위 분할 비율로 반올림. 정분할은 N(>=1), 역분할은 1/N(<1)."""
     if r >= 1:
@@ -116,6 +131,14 @@ class StockAlarm:
         self.price_jump[ticker] = find_price_jump(df['Close'])
         return float(df['Close'].max()), float(df['Close'].iloc[-1]), df.index[-1].date().isoformat()
 
+    def get_etf_price(self, etf):
+        """레버리지 ETF(TQQQ/SOXL) 최근 종가. 조회 실패 시 0 — 추정 표시만 생략되고 알림 자체는 계속 나간다."""
+        try:
+            _, price, _ = self.get_price(etf)
+            return price
+        except Exception:
+            return 0
+
     def get_splits(self, ticker):
         """yfinance가 등록한 분할 이벤트 [(날짜 ISO, 비율)]. 정분할 3:1 이면 3.0."""
         forced = os.environ.get(f'TEST_{ticker}_SPLIT')           # "YYYY-MM-DD:비율"
@@ -219,12 +242,11 @@ class StockAlarm:
         alerts = []
         self.infi_alerts(ticker, cur_p, infi_hae, alerts)
         if ticker == "QQQ":
-            self.qqq_buy_alerts(ath, drop_pct, alerts)
+            self.qqq_buy_alerts(ath, cur_p, self.get_etf_price(etf), drop_pct, alerts)
             if gain_pct is not None:
                 self.qqq_sell_alerts(ath, cur_p, drop_pct, gain_pct, t, alerts, close_date)
         else:
-            _, soxl_price, _ = self.get_price("SOXL")
-            self.soxx_buy_alerts(ath, cur_p, soxl_price, drop_pct, alerts)
+            self.soxx_buy_alerts(ath, cur_p, self.get_etf_price(etf), drop_pct, alerts)
             if gain_pct is not None:
                 self.soxx_sell_alerts(ath, cur_p, drop_pct, gain_pct, t, alerts, close_date)
 
@@ -245,30 +267,28 @@ class StockAlarm:
 
     # ── QQQ 매수 ───────────────────────────────────────────────────────────────
 
-    def qqq_buy_alerts(self, ath, drop_pct, alerts):
-        buy_abs = ath * (1 + QQQ_BUY_ENTER / 100)
+    def qqq_buy_alerts(self, ath, cur_p, tqqq_price, drop_pct, alerts):
+        def fmt_level(label, level):
+            return fmt_etf_level(label, level, ath, cur_p, "TQQQ", tqqq_price)
+
+        buy_detail = fmt_level("매수", QQQ_BUY_ENTER)
         if drop_pct <= QQQ_BUY_ENTER:
-            alerts.append(f"🚨 [QQQ→TQQQ] 매수 타점 도달 (현재 {drop_pct:+.1f}% / 기준 {QQQ_BUY_ENTER}%(${buy_abs:.2f}))")
+            alerts.append(f"🚨 [QQQ→TQQQ] 매수 타점 도달 (현재 {drop_pct:+.1f}%) | {buy_detail}")
         elif drop_pct <= QQQ_BUY_NEAR:
-            alerts.append(f"⚠️ [QQQ] 매수 타점 근접 (현재 {drop_pct:+.1f}% / 기준 {QQQ_BUY_ENTER}%(${buy_abs:.2f}))")
+            alerts.append(f"⚠️ [QQQ] 매수 타점 근접 (현재 {drop_pct:+.1f}%) | {buy_detail}")
+        else:
+            alerts.append(f"✅ [QQQ] 매수 타점 대기 (현재 {drop_pct:+.1f}%) | {buy_detail}")
 
         cfg = HARD_LEVELS["QQQ"]
+        hard_detail = " / ".join(fmt_level(lbl, thr) for thr, lbl in hard_level_list(cfg))
         icon, text = hard_status(cfg, drop_pct)
-        if icon != "✅":
-            detail = " / ".join(f"{lbl} {thr}%(${ath * (1 + thr / 100):.2f})" for thr, lbl in hard_level_list(cfg))
-            alerts.append(f"{icon} [QQQ] {text} (현재 {drop_pct:+.1f}% / 기준 {detail})")
+        alerts.append(f"{icon} [QQQ] {text} (현재 {drop_pct:+.1f}%) | {hard_detail}")
 
     # ── SOXX 매수 ──────────────────────────────────────────────────────────────
 
     def soxx_buy_alerts(self, ath, cur_p, soxl_price, drop_pct, alerts):
         def fmt_level(label, level):
-            abs_price = ath * (1 + level / 100)
-            soxl_part = ""
-            if soxl_price > 0 and cur_p > 0:
-                move = abs_price / cur_p - 1
-                soxl_est = soxl_price * (1 + 2.9 * move)
-                soxl_part = f"(SOXL ${soxl_est:.2f})" if soxl_est > 0 else ""
-            return f"{label} {level:.0f}% ${abs_price:.2f}{soxl_part}"
+            return fmt_etf_level(label, level, ath, cur_p, "SOXL", soxl_price)
 
         buy_levels = [(-20, "1차"), (-22, "2차"), (-25, "3차")]
         buy_detail = " / ".join(fmt_level(lbl, thr) for thr, lbl in buy_levels)
